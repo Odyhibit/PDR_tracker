@@ -104,12 +104,12 @@ export default function LogPage() {
 
     setSaving(true)
     try {
-      addVehicle({
+      await addVehicle({
         id: uuid(),
         vin: vin.trim().toUpperCase(),
         make, model, year, color, notes,
-        customerId: custId,
-        customerName: selectedCustomer?.name || '',
+        customer_id: custId,
+        
         date,
         createdAt: new Date().toISOString(),
       })

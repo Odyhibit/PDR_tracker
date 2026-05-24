@@ -1,49 +1,116 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { supabase } from '../utils/supabase.js'
 import * as storage from '../utils/storage.js'
 
 const Ctx = createContext(null)
 
 export function AppProvider({ children }) {
-  const [customers, setCustomers]         = useState([])
-  const [vehicles,  setVehicles]          = useState([])
-  const [lastCustomerId, setLastCidState] = useState(null)
+  const [session,        setSession]        = useState(null)
+  const [authLoading,    setAuthLoading]    = useState(true)
+  const [customers,      setCustomers]      = useState([])
+  const [vehicles,       setVehicles]       = useState([])
+  const [lastCustomerId, setLastCidState]   = useState(null)
+  const [dataLoading,    setDataLoading]    = useState(false)
+
+  // ── Auth ────────────────────────────────────────────────
 
   useEffect(() => {
-    setCustomers(storage.getCustomers())
-    setVehicles(storage.getVehicles())
-    setLastCidState(storage.getLastCustomerId())
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      setAuthLoading(false)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+    return () => subscription.unsubscribe()
   }, [])
 
-  const addOrUpdateCustomer = useCallback((c) => {
-    storage.saveCustomer(c)
-    setCustomers(storage.getCustomers())
+  // ── Load data when session changes ──────────────────────
+
+  useEffect(() => {
+    if (session) {
+      loadAll()
+    } else {
+      setCustomers([])
+      setVehicles([])
+      setLastCidState(null)
+    }
+  }, [session])
+
+  async function loadAll() {
+    setDataLoading(true)
+    try {
+      const [c, v, lastCid] = await Promise.all([
+        storage.getCustomers(),
+        storage.getVehicles(),
+        storage.getLastCustomerId(),
+      ])
+      setCustomers(c)
+      setVehicles(v)
+      setLastCidState(lastCid)
+    } catch (e) {
+      console.error('Failed to load data:', e)
+    } finally {
+      setDataLoading(false)
+    }
+  }
+
+  // ── Auth actions ─────────────────────────────────────────
+
+  const signIn = useCallback(async (email, password) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw error
   }, [])
 
-  const removeCustomer = useCallback((id) => {
-    storage.deleteCustomer(id)
-    setCustomers(storage.getCustomers())
+  const signUp = useCallback(async (email, password) => {
+    const { error } = await supabase.auth.signUp({ email, password })
+    if (error) throw error
   }, [])
 
-  const setLastCustomer = useCallback((id) => {
-    storage.setLastCustomerId(id)
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut()
+  }, [])
+
+  // ── Customer actions ──────────────────────────────────────
+
+  const addOrUpdateCustomer = useCallback(async (c) => {
+    await storage.saveCustomer(c)
+    setCustomers(await storage.getCustomers())
+  }, [])
+
+  const removeCustomer = useCallback(async (id) => {
+    await storage.deleteCustomer(id)
+    setCustomers(await storage.getCustomers())
+  }, [])
+
+  const setLastCustomer = useCallback(async (id) => {
+    await storage.setLastCustomerId(id)
     setLastCidState(id)
   }, [])
 
-  const addVehicle = useCallback((v) => {
-    storage.saveVehicle(v)
-    setVehicles(storage.getVehicles())
+  // ── Vehicle actions ───────────────────────────────────────
+
+  const addVehicle = useCallback(async (v) => {
+    await storage.saveVehicle(v)
+    setVehicles(await storage.getVehicles())
   }, [])
 
-  const removeVehicle = useCallback((id) => {
-    storage.deleteVehicle(id)
-    setVehicles(storage.getVehicles())
+  const removeVehicle = useCallback(async (id) => {
+    await storage.deleteVehicle(id)
+    setVehicles(await storage.getVehicles())
   }, [])
 
   const vehiclesForCustomer = useCallback((cid) =>
-    vehicles.filter(v => v.customerId === cid), [vehicles])
+    vehicles.filter(v => v.customer_id === cid), [vehicles])
+
+  // ── Admin check ───────────────────────────────────────────
+  // Store your admin email in VITE_ADMIN_EMAIL env var
+  const isAdmin = session?.user?.email === import.meta.env.VITE_ADMIN_EMAIL
 
   return (
     <Ctx.Provider value={{
+      session, authLoading, dataLoading, isAdmin,
+      signIn, signUp, signOut,
       customers, lastCustomerId,
       addOrUpdateCustomer, removeCustomer, setLastCustomer,
       vehicles, addVehicle, removeVehicle, vehiclesForCustomer,

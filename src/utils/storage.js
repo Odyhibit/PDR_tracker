@@ -1,82 +1,88 @@
-const KEYS = {
-  CUSTOMERS: 'pdr_customers',
-  VEHICLES:  'pdr_vehicles',
-  LAST_CID:  'pdr_last_customer_id',
+import { supabase } from './supabase.js'
+
+// ── Customers (shared, read by all) ───────────────────────
+
+export async function getCustomers() {
+  const { data, error } = await supabase
+    .from('customers')
+    .select('*')
+    .order('name')
+  if (error) throw error
+  return data || []
 }
 
-function load(key) {
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : null
-  } catch { return null }
+export async function saveCustomer(customer) {
+  const { error } = await supabase
+    .from('customers')
+    .upsert(customer, { onConflict: 'id' })
+  if (error) throw error
 }
 
-function save(key, value) {
-  localStorage.setItem(key, JSON.stringify(value))
+export async function deleteCustomer(id) {
+  const { error } = await supabase
+    .from('customers')
+    .delete()
+    .eq('id', id)
+  if (error) throw error
 }
 
-// ── Customers ─────────────────────────────────────────────
+// ── Vehicles (private per user, user_id set by RLS) ───────
 
-export function getCustomers() {
-  return load(KEYS.CUSTOMERS) || []
+export async function getVehicles() {
+  const { data, error } = await supabase
+    .from('vehicles')
+    .select('*, customers(name, company)')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
 }
 
-export function saveCustomer(customer) {
-  const list = getCustomers()
-  const idx = list.findIndex(c => c.id === customer.id)
-  if (idx >= 0) list[idx] = customer
-  else list.push(customer)
-  save(KEYS.CUSTOMERS, list)
+export async function saveVehicle(vehicle) {
+  const { data: { user } } = await supabase.auth.getUser()
+  const { error } = await supabase
+    .from('vehicles')
+    .upsert({ ...vehicle, user_id: user.id }, { onConflict: 'id' })
+  if (error) throw error
 }
 
-export function deleteCustomer(id) {
-  save(KEYS.CUSTOMERS, getCustomers().filter(c => c.id !== id))
+export async function deleteVehicle(id) {
+  const { error } = await supabase
+    .from('vehicles')
+    .delete()
+    .eq('id', id)
+  if (error) throw error
 }
 
-// ── Last Customer ─────────────────────────────────────────
+// ── User Preferences (last customer) ──────────────────────
 
-export function getLastCustomerId() {
-  return localStorage.getItem(KEYS.LAST_CID)
+export async function getLastCustomerId() {
+  const { data, error } = await supabase
+    .from('user_preferences')
+    .select('last_customer_id')
+    .single()
+  if (error && error.code !== 'PGRST116') throw error // PGRST116 = no rows, that's fine
+  return data?.last_customer_id || null
 }
 
-export function setLastCustomerId(id) {
-  localStorage.setItem(KEYS.LAST_CID, id)
+export async function setLastCustomerId(customerId) {
+  const { data: { user } } = await supabase.auth.getUser()
+  const { error } = await supabase
+    .from('user_preferences')
+    .upsert({ user_id: user.id, last_customer_id: customerId }, { onConflict: 'user_id' })
+  if (error) throw error
 }
 
-// ── Vehicles ──────────────────────────────────────────────
-
-export function getVehicles() {
-  return load(KEYS.VEHICLES) || []
-}
-
-export function saveVehicle(vehicle) {
-  const list = getVehicles()
-  const idx = list.findIndex(v => v.id === vehicle.id)
-  if (idx >= 0) list[idx] = vehicle
-  else list.push(vehicle)
-  save(KEYS.VEHICLES, list)
-}
-
-export function deleteVehicle(id) {
-  save(KEYS.VEHICLES, getVehicles().filter(v => v.id !== id))
-}
-
-// ── CSV Export ────────────────────────────────────────────
+// ── CSV Export (unchanged, runs client-side) ──────────────
 
 export function exportCustomerCSV(customer, vehicles) {
   const rows = []
-
-  // Customer header block
   rows.push(['Customer', customer.name])
   if (customer.company) rows.push(['Company', customer.company])
   if (customer.phone)   rows.push(['Phone',   customer.phone])
   if (customer.email)   rows.push(['Email',   customer.email])
-  rows.push([]) // blank separator row
-
-  // Vehicle table header
+  rows.push([])
   rows.push(['Date', 'VIN', 'Year', 'Make', 'Model', 'Color', 'Notes'])
 
-  // Vehicle rows sorted by date
   const sorted = [...vehicles].sort((a, b) => new Date(a.date) - new Date(b.date))
   for (const v of sorted) {
     const date = new Date(v.date).toLocaleDateString('en-US', {
@@ -85,23 +91,20 @@ export function exportCustomerCSV(customer, vehicles) {
     rows.push([date, v.vin, v.year, v.make, v.model, v.color, v.notes || ''])
   }
 
-  // Serialize — wrap fields with commas or quotes in double-quotes
   const csv = rows.map(row =>
     row.map(cell => {
       const s = String(cell ?? '')
       return s.includes(',') || s.includes('"') || s.includes('\n')
-        ? `"${s.replace(/"/g, '""')}"`
-        : s
+        ? `"${s.replace(/"/g, '""')}"` : s
     }).join(',')
   ).join('\r\n')
 
-  // Trigger download
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const url  = URL.createObjectURL(blob)
   const a    = document.createElement('a')
-  const safeName = customer.name.replace(/[^a-z0-9]/gi, '_')
+  const safe = customer.name.replace(/[^a-z0-9]/gi, '_')
   a.href     = url
-  a.download = `PDR_${safeName}_${new Date().toISOString().slice(0,10)}.csv`
+  a.download = `PDR_${safe}_${new Date().toISOString().slice(0,10)}.csv`
   a.click()
   URL.revokeObjectURL(url)
 }

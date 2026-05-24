@@ -15,17 +15,17 @@ export async function decodeVin(vin) {
   const r    = data.Results?.[0]
   if (!r) throw new Error('No data returned from NHTSA.')
 
-  const errorCode = r['ErrorCode']
+  const errorCode = r['Error Code']
   if (errorCode && errorCode !== '0') {
-    throw new Error(r['ErrorText'] || 'VIN could not be decoded.')
+    throw new Error(r['Error Text'] || 'VIN could not be decoded.')
   }
 
   return {
     make:  r['Make']              || '',
     model: r['Model']             || '',
-    year:  r['ModelYear']        || '',
-    body:  r['BodyClass']        || '',
+    year:  r['Model Year']        || '',
+    body:  r['Body Class']        || '',
     trim:  r['Trim']              || '',
-    fuel:  r['FuelTypePrimary'] || '',
+    fuel:  r['Fuel Type - Primary'] || '',
   }
 }
