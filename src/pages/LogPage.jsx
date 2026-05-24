@@ -32,7 +32,9 @@ export default function LogPage() {
   const [colorOpen, setColorOpen] = useState(false)
   const [custOpen,  setCustOpen]  = useState(false)
 
-  // Apply last customer default on mount and when it changes
+  // Track if a lookup is already in flight so onBlur and button don't double-fire
+  const lookingUp = useRef(false)
+
   useEffect(() => {
     if (lastCustomerId && !custId) setCustId(lastCustomerId)
   }, [lastCustomerId])
@@ -46,11 +48,14 @@ export default function LogPage() {
   }
 
   async function lookupVin(v) {
-    const clean = v.trim().toUpperCase()
+    // Guard against double calls (onBlur + button click race)
+    if (lookingUp.current) return
+    const clean = (v || '').trim().toUpperCase()
     if (!isValidVin(clean)) {
       setDecodeErr('Not a valid 17-character VIN.')
       return
     }
+    lookingUp.current = true
     setDecoding(true)
     setDecodeErr('')
     try {
@@ -59,9 +64,28 @@ export default function LogPage() {
       setModel(r.model)
       setYear(r.year)
     } catch (e) {
-      setDecodeErr(e.message)
+      setDecodeErr(e.message || 'VIN lookup failed. Check your connection.')
     } finally {
       setDecoding(false)
+      lookingUp.current = false
+    }
+  }
+
+  function handleVinChange(e) {
+    const val = e.target.value.toUpperCase()
+    setVin(val)
+    setDecodeErr('')
+    // Clear decoded data if VIN is edited after a successful decode
+    if (make || model || year) {
+      setMake(''); setModel(''); setYear('')
+    }
+  }
+
+  // Only auto-lookup on blur if VIN is complete and not already decoded/decoding
+  function handleVinBlur() {
+    const clean = vin.trim().toUpperCase()
+    if (isValidVin(clean) && !make && !decoding) {
+      lookupVin(clean)
     }
   }
 
@@ -99,7 +123,7 @@ export default function LogPage() {
   }
 
   const vinFilled = vin.trim().length === 17
-  const decoded   = make && model && year
+  const decoded   = !!(make && model && year)
 
   return (
     <div style={{ padding: '16px 16px 120px', maxWidth: 520, margin: '0 auto' }}>
@@ -141,11 +165,14 @@ export default function LogPage() {
       <div style={{ display: 'flex', gap: 8 }}>
         <input
           value={vin}
-          onChange={e => { setVin(e.target.value.toUpperCase()); setDecodeErr('') }}
-          onBlur={() => vinFilled && !decoded && lookupVin(vin)}
+          onChange={handleVinChange}
+          onBlur={handleVinBlur}
           placeholder="Scan or type 17-char VIN"
           maxLength={17}
           style={{ fontFamily: 'monospace', letterSpacing: 1 }}
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
         />
         <button
           onClick={() => setScanning(true)}
@@ -165,20 +192,25 @@ export default function LogPage() {
         <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{vin.length}/17</div>
       )}
 
-      {vinFilled && !decoded && !decoding && (
+      {/* Always show lookup button when VIN is filled and not yet decoded */}
+      {vinFilled && !decoded && (
         <div style={{ marginTop: 8 }}>
-          <Button variant="ghost" onClick={() => lookupVin(vin)}>Look Up VIN</Button>
-        </div>
-      )}
-
-      {decoding && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, color: 'var(--text-2)' }}>
-          <Spinner size={16} color="var(--accent)" /> Decoding VIN…
+          <Button
+            variant="ghost"
+            onClick={() => lookupVin(vin)}
+            disabled={decoding}
+          >
+            {decoding
+              ? <><Spinner size={16} color="var(--accent)" /> &nbsp;Decoding…</>
+              : 'Look Up VIN'}
+          </Button>
         </div>
       )}
 
       {decodeErr && (
-        <div style={{ marginTop: 8, fontSize: 13, color: 'var(--danger)' }}>{decodeErr}</div>
+        <div style={{ marginTop: 8, fontSize: 13, color: 'var(--danger)', padding: '8px 12px', background: 'rgba(224,82,82,0.1)', borderRadius: 'var(--radius)' }}>
+          ⚠ {decodeErr}
+        </div>
       )}
 
       {/* Decoded vehicle display */}
@@ -189,6 +221,12 @@ export default function LogPage() {
           </div>
           <div style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-3)', marginTop: 4, letterSpacing: 0.5 }}>
             {vin}
+          </div>
+          <div
+            onClick={() => { setMake(''); setModel(''); setYear('') }}
+            style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, cursor: 'pointer', textDecoration: 'underline' }}
+          >
+            Not right? Clear and re-lookup
           </div>
         </Card>
       )}
