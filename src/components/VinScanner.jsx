@@ -129,7 +129,7 @@ export default function VinScanner({ onScanned, onClose }) {
         {/* The cutout window — wide and short for horizontal barcodes,
             but user can tilt phone for vertical ones */}
         <div style={{
-          position: 'relative', width: 300, height: 90, zIndex: 2,
+          position: 'relative', width: 90, height: 300, zIndex: 2,
           boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)',
           borderRadius: 4,
         }}>
@@ -142,7 +142,7 @@ export default function VinScanner({ onScanned, onClose }) {
             <div key={i} style={{ position: 'absolute', width: 20, height: 20, ...s }} />
           ))}
           <div style={{
-            position: 'absolute', left: 0, right: 0, height: 2,
+            position: 'absolute', top: 0, bottom: 0, width: 2,
             background: 'rgba(244,160,36,0.85)',
             animation: 'scanline 2s ease-in-out infinite',
           }} />
@@ -161,10 +161,7 @@ export default function VinScanner({ onScanned, onClose }) {
         ) : (
           <>
             <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, lineHeight: 1.6 }}>
-              Point at the barcode on the driver-side door jamb
-            </p>
-            <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 6 }}>
-              Tilt your phone to align with vertical barcodes
+              The barcode on the driver-side door jamb
             </p>
           </>
         )}
@@ -172,9 +169,9 @@ export default function VinScanner({ onScanned, onClose }) {
 
       <style>{`
         @keyframes scanline {
-          0%   { top: 10%; }
-          50%  { top: 80%; }
-          100% { top: 10%; }
+          0%   { left: 10%; }
+          50%  { left: 80%; }
+          100% { left: 10%; }
         }
       `}</style>
     </div>
