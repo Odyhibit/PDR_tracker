@@ -5,14 +5,15 @@ import * as storage from '../utils/storage.js'
 const Ctx = createContext(null)
 
 export function AppProvider({ children }) {
-  const [session,        setSession]        = useState(null)
-  const [authLoading,    setAuthLoading]    = useState(true)
-  const [customers,      setCustomers]      = useState([])
-  const [vehicles,       setVehicles]       = useState([])
-  const [lastCustomerId, setLastCidState]   = useState(null)
-  const [dataLoading,    setDataLoading]    = useState(false)
+  const [session,        setSession]      = useState(null)
+  const [authLoading,    setAuthLoading]  = useState(true)
+  const [customers,      setCustomers]    = useState([])
+  const [vehicles,       setVehicles]     = useState([])
+  const [lastCustomerId, setLastCidState] = useState(null)
+  const [profile,        setProfile]      = useState(null)
+  const [dataLoading,    setDataLoading]  = useState(false)
 
-  // ── Auth ────────────────────────────────────────────────
+  // ── Auth ─────────────────────────────────────────────────
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -25,29 +26,27 @@ export function AppProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  // ── Load data when session changes ──────────────────────
-
   useEffect(() => {
-    if (session) {
-      loadAll()
-    } else {
-      setCustomers([])
-      setVehicles([])
-      setLastCidState(null)
+    if (session) loadAll()
+    else {
+      setCustomers([]); setVehicles([])
+      setLastCidState(null); setProfile(null)
     }
   }, [session])
 
   async function loadAll() {
     setDataLoading(true)
     try {
-      const [c, v, lastCid] = await Promise.all([
+      const [c, v, lastCid, prof] = await Promise.all([
         storage.getCustomers(),
         storage.getVehicles(),
         storage.getLastCustomerId(),
+        storage.getProfile(),
       ])
       setCustomers(c)
       setVehicles(v)
       setLastCidState(lastCid)
+      setProfile(prof)
     } catch (e) {
       console.error('Failed to load data:', e)
     } finally {
@@ -55,15 +54,19 @@ export function AppProvider({ children }) {
     }
   }
 
-  // ── Auth actions ─────────────────────────────────────────
+  // ── Auth actions ──────────────────────────────────────────
 
   const signIn = useCallback(async (email, password) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
   }, [])
 
-  const signUp = useCallback(async (email, password) => {
-    const { error } = await supabase.auth.signUp({ email, password })
+  const signUp = useCallback(async (email, password, firstName) => {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { first_name: firstName } }
+    })
     if (error) throw error
   }, [])
 
@@ -103,14 +106,12 @@ export function AppProvider({ children }) {
   const vehiclesForCustomer = useCallback((cid) =>
     vehicles.filter(v => v.customer_id === cid), [vehicles])
 
-  // ── Admin check ───────────────────────────────────────────
-  // Store your admin email in VITE_ADMIN_EMAIL env var
   const isAdmin = session?.user?.email === import.meta.env.VITE_ADMIN_EMAIL
 
   return (
     <Ctx.Provider value={{
       session, authLoading, dataLoading, isAdmin,
-      signIn, signUp, signOut,
+      profile, signIn, signUp, signOut,
       customers, lastCustomerId,
       addOrUpdateCustomer, removeCustomer, setLastCustomer,
       vehicles, addVehicle, removeVehicle, vehiclesForCustomer,

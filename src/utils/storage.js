@@ -26,7 +26,7 @@ export async function deleteCustomer(id) {
   if (error) throw error
 }
 
-// ── Vehicles (private per user, user_id set by RLS) ───────
+// ── Vehicles (private per user) ───────────────────────────
 
 export async function getVehicles() {
   const { data, error } = await supabase
@@ -53,6 +53,35 @@ export async function deleteVehicle(id) {
   if (error) throw error
 }
 
+// ── VIN duplicate check (cross-user via RPC) ──────────────
+
+export async function checkVinExists(vin) {
+  const { data, error } = await supabase
+    .rpc('check_vin_exists', { lookup_vin: vin })
+  if (error) throw error
+  if (!data || data.length === 0) return null
+  return data[0] // { found, first_name, log_date, color, user_id }
+}
+
+// ── Profile ───────────────────────────────────────────────
+
+export async function getProfile() {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('first_name')
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+export async function saveProfile(firstName) {
+  const { data: { user } } = await supabase.auth.getUser()
+  const { error } = await supabase
+    .from('profiles')
+    .upsert({ user_id: user.id, first_name: firstName }, { onConflict: 'user_id' })
+  if (error) throw error
+}
+
 // ── User Preferences (last customer) ──────────────────────
 
 export async function getLastCustomerId() {
@@ -60,7 +89,7 @@ export async function getLastCustomerId() {
     .from('user_preferences')
     .select('last_customer_id')
     .maybeSingle()
-  if (error && error.code !== 'PGRST116') throw error // PGRST116 = no rows, that's fine
+  if (error) throw error
   return data?.last_customer_id || null
 }
 
@@ -72,7 +101,7 @@ export async function setLastCustomerId(customerId) {
   if (error) throw error
 }
 
-// ── CSV Export (unchanged, runs client-side) ──────────────
+// ── CSV Export ────────────────────────────────────────────
 
 export function exportCustomerCSV(customer, vehicles) {
   const rows = []
@@ -81,14 +110,14 @@ export function exportCustomerCSV(customer, vehicles) {
   if (customer.phone)   rows.push(['Phone',   customer.phone])
   if (customer.email)   rows.push(['Email',   customer.email])
   rows.push([])
-  rows.push(['Date', 'VIN', 'Year', 'Make', 'Model', 'Color', 'Notes'])
+  rows.push(['Date', 'VIN', 'Year', 'Make', 'Model', 'Color', 'Technician', 'Notes'])
 
   const sorted = [...vehicles].sort((a, b) => new Date(a.date) - new Date(b.date))
   for (const v of sorted) {
     const date = new Date(v.date).toLocaleDateString('en-US', {
       month: '2-digit', day: '2-digit', year: 'numeric'
     })
-    rows.push([date, v.vin, v.year, v.make, v.model, v.color, v.notes || ''])
+    rows.push([date, v.vin, v.year, v.make, v.model, v.color, v.logged_by || '', v.notes || ''])
   }
 
   const csv = rows.map(row =>

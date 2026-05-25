@@ -21,6 +21,7 @@ export function generateAndPrintReport(customer, vehicles) {
       <td class="mono">${v.vin}</td>
       <td>${v.year} ${v.make} ${v.model}</td>
       <td>${v.color}</td>
+      <td>${v.logged_by || '—'}</td>
       <td>${v.notes || '—'}</td>
     </tr>`).join('')
 
@@ -105,6 +106,7 @@ export function generateAndPrintReport(customer, vehicles) {
         <th>VIN</th>
         <th>Vehicle</th>
         <th>Color</th>
+        <th>Technician</th>
         <th>Notes</th>
       </tr>
     </thead>

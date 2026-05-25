@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { v4 as uuid } from 'uuid'
 import { useApp } from '../context/AppContext.jsx'
 import { decodeVin, isValidVin } from '../utils/nhtsa.js'
+import { checkVinExists } from '../utils/storage.js'
 import { Button, Card, Label, Spinner, ColorDot, Modal } from '../components/UI.jsx'
 import VinScanner from '../components/VinScanner.jsx'
 
@@ -12,27 +13,31 @@ const COLORS = [
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
+function fmtDate(iso) {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 export default function LogPage() {
-  const { customers, lastCustomerId, addVehicle, setLastCustomer } = useApp()
+  const { customers, lastCustomerId, addVehicle, setLastCustomer, profile, session } = useApp()
 
-  const [vin,      setVin]      = useState('')
-  const [make,     setMake]     = useState('')
-  const [model,    setModel]    = useState('')
-  const [year,     setYear]     = useState('')
-  const [color,    setColor]    = useState('')
-  const [notes,    setNotes]    = useState('')
-  const [custId,   setCustId]   = useState('')
-  const [date,     setDate]     = useState(todayISO())
+  const [vin,        setVin]        = useState('')
+  const [make,       setMake]       = useState('')
+  const [model,      setModel]      = useState('')
+  const [year,       setYear]       = useState('')
+  const [color,      setColor]      = useState('')
+  const [notes,      setNotes]      = useState('')
+  const [custId,     setCustId]     = useState('')
+  const [date,       setDate]       = useState(todayISO())
+  const [dupWarning, setDupWarning] = useState(null)  // { first_name, log_date, color }
 
-  const [scanning,  setScanning]  = useState(false)
-  const [decoding,  setDecoding]  = useState(false)
-  const [decodeErr, setDecodeErr] = useState('')
-  const [saving,    setSaving]    = useState(false)
-  const [saved,     setSaved]     = useState(false)
-  const [colorOpen, setColorOpen] = useState(false)
-  const [custOpen,  setCustOpen]  = useState(false)
+  const [scanning,   setScanning]   = useState(false)
+  const [decoding,   setDecoding]   = useState(false)
+  const [decodeErr,  setDecodeErr]  = useState('')
+  const [saving,     setSaving]     = useState(false)
+  const [saved,      setSaved]      = useState(false)
+  const [colorOpen,  setColorOpen]  = useState(false)
+  const [custOpen,   setCustOpen]   = useState(false)
 
-  // Track if a lookup is already in flight so onBlur and button don't double-fire
   const lookingUp = useRef(false)
 
   useEffect(() => {
@@ -48,21 +53,28 @@ export default function LogPage() {
   }
 
   async function lookupVin(v) {
-    // Guard against double calls (onBlur + button click race)
     if (lookingUp.current) return
     const clean = (v || '').trim().toUpperCase()
-    if (!isValidVin(clean)) {
-      setDecodeErr('Not a valid 17-character VIN.')
-      return
-    }
+    if (!isValidVin(clean)) { setDecodeErr('Not a valid 17-character VIN.'); return }
+
     lookingUp.current = true
     setDecoding(true)
     setDecodeErr('')
+    setDupWarning(null)
+
     try {
-      const r = await decodeVin(clean)
-      setMake(r.make)
-      setModel(r.model)
-      setYear(r.year)
+      // Run VIN decode and duplicate check in parallel
+      const [decoded, dup] = await Promise.all([
+        decodeVin(clean),
+        checkVinExists(clean),
+      ])
+
+      setMake(decoded.make)
+      setModel(decoded.model)
+      setYear(decoded.year)
+
+      if (dup) setDupWarning(dup)
+
     } catch (e) {
       setDecodeErr(e.message || 'VIN lookup failed. Check your connection.')
     } finally {
@@ -75,24 +87,19 @@ export default function LogPage() {
     const val = e.target.value.toUpperCase()
     setVin(val)
     setDecodeErr('')
-    // Clear decoded data if VIN is edited after a successful decode
-    if (make || model || year) {
-      setMake(''); setModel(''); setYear('')
-    }
+    setDupWarning(null)
+    if (make || model || year) { setMake(''); setModel(''); setYear('') }
   }
 
-  // Only auto-lookup on blur if VIN is complete and not already decoded/decoding
   function handleVinBlur() {
     const clean = vin.trim().toUpperCase()
-    if (isValidVin(clean) && !make && !decoding) {
-      lookupVin(clean)
-    }
+    if (isValidVin(clean) && !make && !decoding) lookupVin(clean)
   }
 
   function resetForm(keepCustomer = true) {
     setVin(''); setMake(''); setModel(''); setYear('')
     setColor(''); setNotes(''); setDate(todayISO())
-    setDecodeErr('')
+    setDecodeErr(''); setDupWarning(null)
     if (!keepCustomer) setCustId('')
   }
 
@@ -105,18 +112,20 @@ export default function LogPage() {
     setSaving(true)
     try {
       await addVehicle({
-        id: uuid(),
-        vin: vin.trim().toUpperCase(),
+        id:         uuid(),
+        vin:        vin.trim().toUpperCase(),
         make, model, year, color, notes,
         customer_id: custId,
-        
         date,
+        logged_by:  profile?.first_name || session?.user?.email || 'Unknown',
         created_at: new Date().toISOString(),
       })
       await setLastCustomer(custId)
       resetForm(true)
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
+    } catch(e) {
+      alert(e.message || 'Failed to save.')
     } finally {
       setSaving(false)
     }
@@ -130,14 +139,11 @@ export default function LogPage() {
 
       {/* Customer */}
       <Label>Customer / Lot</Label>
-      <div
-        onClick={() => setCustOpen(true)}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: 'var(--surface)', border: '1.5px solid var(--border)',
-          borderRadius: 'var(--radius)', padding: '13px 14px', cursor: 'pointer',
-        }}
-      >
+      <div onClick={() => setCustOpen(true)} style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        background: 'var(--surface)', border: '1.5px solid var(--border)',
+        borderRadius: 'var(--radius)', padding: '13px 14px', cursor: 'pointer',
+      }}>
         <span style={{ color: selectedCustomer ? 'var(--text)' : 'var(--text-3)', fontSize: 15 }}>
           {selectedCustomer
             ? selectedCustomer.name + (selectedCustomer.company ? ` · ${selectedCustomer.company}` : '')
@@ -146,19 +152,12 @@ export default function LogPage() {
         <span style={{ color: 'var(--text-3)' }}>▾</span>
       </div>
       {custId && lastCustomerId === custId && (
-        <div style={{ fontSize: 11, color: 'var(--success)', marginTop: 4, marginLeft: 2 }}>
-          ✓ Last used
-        </div>
+        <div style={{ fontSize: 11, color: 'var(--success)', marginTop: 4, marginLeft: 2 }}>✓ Last used</div>
       )}
 
       {/* Date */}
       <Label>Date</Label>
-      <input
-        type="date"
-        value={date}
-        onChange={e => setDate(e.target.value)}
-        style={{ colorScheme: 'dark' }}
-      />
+      <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ colorScheme: 'dark' }} />
 
       {/* VIN */}
       <Label>VIN</Label>
@@ -170,39 +169,24 @@ export default function LogPage() {
           placeholder="Scan or type 17-char VIN"
           maxLength={17}
           style={{ fontFamily: 'monospace', letterSpacing: 1 }}
-          autoComplete="off"
-          autoCorrect="off"
-          spellCheck={false}
+          autoComplete="off" autoCorrect="off" spellCheck={false}
         />
-        <button
-          onClick={() => setScanning(true)}
-          style={{
-            flexShrink: 0, width: 52, height: 48,
-            background: 'var(--accent)', borderRadius: 'var(--radius)',
-            border: 'none', cursor: 'pointer', fontSize: 22,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-          title="Scan barcode"
-        >
-          📷
-        </button>
+        <button onClick={() => setScanning(true)} style={{
+          flexShrink: 0, width: 52, height: 48,
+          background: 'var(--accent)', borderRadius: 'var(--radius)',
+          border: 'none', cursor: 'pointer', fontSize: 22,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>📷</button>
       </div>
 
       {vin.length > 0 && vin.length < 17 && (
         <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{vin.length}/17</div>
       )}
 
-      {/* Always show lookup button when VIN is filled and not yet decoded */}
       {vinFilled && !decoded && (
         <div style={{ marginTop: 8 }}>
-          <Button
-            variant="ghost"
-            onClick={() => lookupVin(vin)}
-            disabled={decoding}
-          >
-            {decoding
-              ? <><Spinner size={16} color="var(--accent)" /> &nbsp;Decoding…</>
-              : 'Look Up VIN'}
+          <Button variant="ghost" onClick={() => lookupVin(vin)} disabled={decoding}>
+            {decoding ? <><Spinner size={16} color="var(--accent)" />&nbsp;Decoding…</> : 'Look Up VIN'}
           </Button>
         </div>
       )}
@@ -213,7 +197,36 @@ export default function LogPage() {
         </div>
       )}
 
-      {/* Decoded vehicle display */}
+      {/* Duplicate VIN warning */}
+      {dupWarning && (
+        <div style={{
+          marginTop: 10, padding: '12px 14px',
+          background: 'rgba(244,160,36,0.12)',
+          border: '1.5px solid var(--accent)',
+          borderRadius: 'var(--radius)',
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10,
+        }}>
+          <div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--accent)', marginBottom: 4 }}>
+              ⚠ VIN ALREADY LOGGED
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>
+              Logged by <strong style={{ color: 'var(--text)' }}>{dupWarning.first_name}</strong> on{' '}
+              <strong style={{ color: 'var(--text)' }}>{fmtDate(dupWarning.log_date)}</strong>
+              {dupWarning.color ? ` — ${dupWarning.color}` : ''}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
+              You can still save if this is intentional.
+            </div>
+          </div>
+          <button onClick={() => setDupWarning(null)} style={{
+            color: 'var(--text-3)', fontSize: 18, background: 'none',
+            border: 'none', cursor: 'pointer', flexShrink: 0, lineHeight: 1,
+          }}>✕</button>
+        </div>
+      )}
+
+      {/* Decoded vehicle */}
       {decoded && (
         <Card style={{ marginTop: 10, borderColor: 'var(--accent)', borderWidth: 1.5 }}>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: 'var(--accent)' }}>
@@ -222,10 +235,7 @@ export default function LogPage() {
           <div style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-3)', marginTop: 4, letterSpacing: 0.5 }}>
             {vin}
           </div>
-          <div
-            onClick={() => { setMake(''); setModel(''); setYear('') }}
-            style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, cursor: 'pointer', textDecoration: 'underline' }}
-          >
+          <div onClick={() => { setMake(''); setModel(''); setYear('') }} style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, cursor: 'pointer', textDecoration: 'underline' }}>
             Not right? Clear and re-lookup
           </div>
         </Card>
@@ -233,14 +243,11 @@ export default function LogPage() {
 
       {/* Color */}
       <Label>Color</Label>
-      <div
-        onClick={() => setColorOpen(true)}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: 'var(--surface)', border: '1.5px solid var(--border)',
-          borderRadius: 'var(--radius)', padding: '13px 14px', cursor: 'pointer',
-        }}
-      >
+      <div onClick={() => setColorOpen(true)} style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        background: 'var(--surface)', border: '1.5px solid var(--border)',
+        borderRadius: 'var(--radius)', padding: '13px 14px', cursor: 'pointer',
+      }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {color && <ColorDot color={color} />}
           <span style={{ color: color ? 'var(--text)' : 'var(--text-3)', fontSize: 15 }}>
@@ -252,12 +259,8 @@ export default function LogPage() {
 
       {/* Notes */}
       <Label>Notes (optional)</Label>
-      <textarea
-        value={notes}
-        onChange={e => setNotes(e.target.value)}
-        placeholder="Panel count, damage description, special notes…"
-        rows={3}
-      />
+      <textarea value={notes} onChange={e => setNotes(e.target.value)}
+        placeholder="Panel count, damage description, special notes…" rows={3} />
 
       {/* Save */}
       <div style={{ marginTop: 24 }}>
@@ -266,27 +269,17 @@ export default function LogPage() {
         </Button>
       </div>
 
-      {/* Scanner */}
-      {scanning && (
-        <VinScanner
-          onScanned={handleVinScanned}
-          onClose={() => setScanning(false)}
-        />
-      )}
+      {scanning && <VinScanner onScanned={handleVinScanned} onClose={() => setScanning(false)} />}
 
-      {/* Color picker modal */}
+      {/* Color picker */}
       <Modal open={colorOpen} onClose={() => setColorOpen(false)} title="Select Color">
         {COLORS.map(c => (
-          <div
-            key={c}
-            onClick={() => { setColor(c); setColorOpen(false) }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 14,
-              padding: '14px 4px', borderBottom: '1px solid var(--border)',
-              cursor: 'pointer',
-              background: color === c ? 'var(--accent-bg)' : 'transparent',
-            }}
-          >
+          <div key={c} onClick={() => { setColor(c); setColorOpen(false) }} style={{
+            display: 'flex', alignItems: 'center', gap: 14,
+            padding: '14px 4px', borderBottom: '1px solid var(--border)',
+            cursor: 'pointer',
+            background: color === c ? 'var(--accent-bg)' : 'transparent',
+          }}>
             <ColorDot color={c} />
             <span style={{ fontSize: 16, color: color === c ? 'var(--accent)' : 'var(--text)', fontWeight: color === c ? 700 : 400 }}>{c}</span>
             {color === c && <span style={{ marginLeft: 'auto', color: 'var(--accent)' }}>✓</span>}
@@ -294,22 +287,18 @@ export default function LogPage() {
         ))}
       </Modal>
 
-      {/* Customer picker modal */}
+      {/* Customer picker */}
       <Modal open={custOpen} onClose={() => setCustOpen(false)} title="Select Customer">
         {customers.length === 0 ? (
           <p style={{ color: 'var(--text-3)', padding: '20px 0', textAlign: 'center' }}>
-            No customers yet — add one in the Customers tab.
+            No customers yet — ask your administrator to add one.
           </p>
         ) : customers.map(c => (
-          <div
-            key={c.id}
-            onClick={() => { setCustId(c.id); setCustOpen(false) }}
-            style={{
-              padding: '14px 4px', borderBottom: '1px solid var(--border)',
-              cursor: 'pointer',
-              background: custId === c.id ? 'var(--accent-bg)' : 'transparent',
-            }}
-          >
+          <div key={c.id} onClick={() => { setCustId(c.id); setCustOpen(false) }} style={{
+            padding: '14px 4px', borderBottom: '1px solid var(--border)',
+            cursor: 'pointer',
+            background: custId === c.id ? 'var(--accent-bg)' : 'transparent',
+          }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 15, fontWeight: 700, color: custId === c.id ? 'var(--accent)' : 'var(--text)' }}>
                 {c.name}

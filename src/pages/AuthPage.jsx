@@ -4,28 +4,29 @@ import { Button, Label } from '../components/UI.jsx'
 
 export default function AuthPage() {
   const { signIn, signUp } = useApp()
-  const [mode,     setMode]     = useState('login') // 'login' | 'signup'
-  const [email,    setEmail]    = useState('')
-  const [password, setPassword] = useState('')
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState('')
-  const [message,  setMessage]  = useState('')
+  const [mode,      setMode]      = useState('login')
+  const [firstName, setFirstName] = useState('')
+  const [email,     setEmail]     = useState('')
+  const [password,  setPassword]  = useState('')
+  const [loading,   setLoading]   = useState(false)
+  const [error,     setError]     = useState('')
+  const [message,   setMessage]   = useState('')
 
   async function handleSubmit() {
-    setError('')
-    setMessage('')
+    setError(''); setMessage('')
     if (!email || !password) { setError('Email and password are required.'); return }
     if (password.length < 6) { setError('Password must be at least 6 characters.'); return }
+    if (mode === 'signup' && !firstName.trim()) { setError('First name is required.'); return }
 
     setLoading(true)
     try {
       if (mode === 'login') {
         await signIn(email, password)
-        // AppContext will handle the session change automatically
       } else {
-        await signUp(email, password)
+        await signUp(email, password, firstName.trim())
         setMessage('Account created! Check your email to confirm, then log in.')
         setMode('login')
+        setFirstName('')
       }
     } catch (e) {
       setError(e.message || 'Something went wrong.')
@@ -34,57 +35,60 @@ export default function AuthPage() {
     }
   }
 
+  function switchMode(m) {
+    setMode(m); setError(''); setMessage(''); setFirstName('')
+  }
+
   return (
     <div style={{
       minHeight: '100dvh', display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
       background: 'var(--bg)', padding: '24px',
     }}>
-      {/* Logo */}
       <div style={{ textAlign: 'center', marginBottom: 40 }}>
-        <div style={{
-          fontFamily: 'var(--font-display)', fontSize: 36, fontWeight: 800,
-          color: 'var(--accent)', letterSpacing: -0.5,
-        }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 36, fontWeight: 800, color: 'var(--accent)', letterSpacing: -0.5 }}>
           PDR TRACKER
         </div>
-        <div style={{
-          fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 600,
-          color: 'var(--text-3)', letterSpacing: 2, textTransform: 'uppercase', marginTop: 4,
-        }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 600, color: 'var(--text-3)', letterSpacing: 2, textTransform: 'uppercase', marginTop: 4 }}>
           Hail Repair Log
         </div>
       </div>
 
-      {/* Card */}
       <div style={{
         background: 'var(--surface)', border: '1px solid var(--border)',
         borderRadius: 'var(--radius-lg)', padding: 24,
         width: '100%', maxWidth: 380,
       }}>
         {/* Tab toggle */}
-        <div style={{
-          display: 'flex', background: 'var(--bg-3)',
-          borderRadius: 'var(--radius)', padding: 3, marginBottom: 24,
-        }}>
+        <div style={{ display: 'flex', background: 'var(--bg-3)', borderRadius: 'var(--radius)', padding: 3, marginBottom: 24 }}>
           {['login', 'signup'].map(m => (
-            <button
-              key={m}
-              onClick={() => { setMode(m); setError(''); setMessage('') }}
-              style={{
-                flex: 1, padding: '9px 0',
-                borderRadius: 'calc(var(--radius) - 2px)',
-                fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700,
-                letterSpacing: 0.5, textTransform: 'uppercase',
-                border: 'none', cursor: 'pointer', transition: 'all 0.15s',
-                background: mode === m ? 'var(--accent)' : 'transparent',
-                color:      mode === m ? '#0f1923'       : 'var(--text-3)',
-              }}
-            >
+            <button key={m} onClick={() => switchMode(m)} style={{
+              flex: 1, padding: '9px 0',
+              borderRadius: 'calc(var(--radius) - 2px)',
+              fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700,
+              letterSpacing: 0.5, textTransform: 'uppercase',
+              border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+              background: mode === m ? 'var(--accent)' : 'transparent',
+              color:      mode === m ? '#0f1923'       : 'var(--text-3)',
+            }}>
               {m === 'login' ? 'Log In' : 'Sign Up'}
             </button>
           ))}
         </div>
+
+        {/* First name — signup only */}
+        {mode === 'signup' && (
+          <>
+            <Label>First Name</Label>
+            <input
+              value={firstName}
+              onChange={e => setFirstName(e.target.value)}
+              placeholder="e.g. Mike"
+              autoFocus
+              onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+            />
+          </>
+        )}
 
         <Label>Email</Label>
         <input
@@ -94,6 +98,7 @@ export default function AuthPage() {
           placeholder="you@example.com"
           autoCapitalize="none"
           autoCorrect="off"
+          autoFocus={mode === 'login'}
           onKeyDown={e => e.key === 'Enter' && handleSubmit()}
         />
 
@@ -107,21 +112,12 @@ export default function AuthPage() {
         />
 
         {error && (
-          <div style={{
-            marginTop: 12, padding: '10px 12px',
-            background: 'rgba(224,82,82,0.12)', borderRadius: 'var(--radius)',
-            fontSize: 13, color: 'var(--danger)', lineHeight: 1.5,
-          }}>
+          <div style={{ marginTop: 12, padding: '10px 12px', background: 'rgba(224,82,82,0.12)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--danger)', lineHeight: 1.5 }}>
             ⚠ {error}
           </div>
         )}
-
         {message && (
-          <div style={{
-            marginTop: 12, padding: '10px 12px',
-            background: 'rgba(61,186,122,0.12)', borderRadius: 'var(--radius)',
-            fontSize: 13, color: 'var(--success)', lineHeight: 1.5,
-          }}>
+          <div style={{ marginTop: 12, padding: '10px 12px', background: 'rgba(61,186,122,0.12)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--success)', lineHeight: 1.5 }}>
             ✓ {message}
           </div>
         )}
