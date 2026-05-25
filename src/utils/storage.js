@@ -59,7 +59,7 @@ export async function getLastCustomerId() {
   const { data, error } = await supabase
     .from('user_preferences')
     .select('last_customer_id')
-    .single()
+    .maybeSingle()
   if (error && error.code !== 'PGRST116') throw error // PGRST116 = no rows, that's fine
   return data?.last_customer_id || null
 }

@@ -111,7 +111,7 @@ export default function LogPage() {
         customer_id: custId,
         
         date,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
       })
       await setLastCustomer(custId)
       resetForm(true)
