@@ -140,7 +140,7 @@ export default function VinScanner({ onScanned, onClose }) {
             <div key={i} style={{ position: 'absolute', width: 20, height: 20, ...s }} />
           ))}
           <div style={{
-            position: 'absolute', top: 0, bottom: 0, width: 2,
+            position: 'absolute', left: 0, right: 0, height: 2,
             background: 'rgba(244,60,36,0.85)',
             animation: 'scanline 2s ease-in-out infinite',
           }} />
