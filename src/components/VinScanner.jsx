@@ -129,7 +129,7 @@ export default function VinScanner({ onScanned, onClose }) {
         {/* The cutout window — wide and short for horizontal barcodes,
             but user can tilt phone for vertical ones */}
         <div style={{
-          position: 'relative', width: 300, height: 90, zIndex: 2,
+          position: 'relative', width: 300, height: 300, zIndex: 2,
           boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)',
           borderRadius: 4,
         }}>
@@ -142,8 +142,8 @@ export default function VinScanner({ onScanned, onClose }) {
             <div key={i} style={{ position: 'absolute', width: 20, height: 20, ...s }} />
           ))}
           <div style={{
-            position: 'absolute', left: 0, right: 0, height: 2,
-            background: 'rgba(244,160,36,0.85)',
+            position: 'absolute', top: 0, bottom: 0, width: 2,
+            background: 'rgba(244,160,136,0.85)',
             animation: 'scanline 2s ease-in-out infinite',
           }} />
         </div>
