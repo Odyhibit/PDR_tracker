@@ -66,12 +66,22 @@ export async function checkVinExists(vin) {
 // ── Profile ───────────────────────────────────────────────
 
 export async function getProfile() {
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError) throw userError
+  if (!user) return null
+
+  const fallback = user?.user_metadata?.first_name
+    ? { first_name: user.user_metadata.first_name }
+    : null
+
   const { data, error } = await supabase
     .from('profiles')
     .select('first_name')
+    .eq('user_id', user.id)
     .maybeSingle()
+  if (error && (error.code === '42P01' || error.code === 'PGRST205')) return fallback
   if (error) throw error
-  return data
+  return data || fallback
 }
 
 export async function saveProfile(firstName) {

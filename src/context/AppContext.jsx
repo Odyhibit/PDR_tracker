@@ -37,16 +37,36 @@ export function AppProvider({ children }) {
   async function loadAll() {
     setDataLoading(true)
     try {
-      const [c, v, lastCid, prof] = await Promise.all([
+      const [customerResult, vehicleResult, lastCustomerResult, profileResult] = await Promise.allSettled([
         storage.getCustomers(),
         storage.getVehicles(),
         storage.getLastCustomerId(),
         storage.getProfile(),
       ])
-      setCustomers(c)
-      setVehicles(v)
-      setLastCidState(lastCid)
-      setProfile(prof)
+
+      if (customerResult.status === 'fulfilled') setCustomers(customerResult.value)
+      else {
+        console.error('Failed to load customers:', customerResult.reason)
+        setCustomers([])
+      }
+
+      if (vehicleResult.status === 'fulfilled') setVehicles(vehicleResult.value)
+      else {
+        console.error('Failed to load vehicles:', vehicleResult.reason)
+        setVehicles([])
+      }
+
+      if (lastCustomerResult.status === 'fulfilled') setLastCidState(lastCustomerResult.value)
+      else {
+        console.error('Failed to load last customer:', lastCustomerResult.reason)
+        setLastCidState(null)
+      }
+
+      if (profileResult.status === 'fulfilled') setProfile(profileResult.value)
+      else {
+        console.error('Failed to load profile:', profileResult.reason)
+        setProfile(null)
+      }
     } catch (e) {
       console.error('Failed to load data:', e)
     } finally {
