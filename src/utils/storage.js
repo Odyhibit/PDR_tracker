@@ -1,4 +1,5 @@
 import { supabase } from './supabase.js'
+import { formatCentralDate, todayCentralISO } from './dates.js'
 
 // ── Customers (shared, read by all) ───────────────────────
 
@@ -124,7 +125,7 @@ export function exportCustomerCSV(customer, vehicles) {
 
   const sorted = [...vehicles].sort((a, b) => new Date(a.date) - new Date(b.date))
   for (const v of sorted) {
-    const date = new Date(v.date).toLocaleDateString('en-US', {
+    const date = formatCentralDate(v.date, {
       month: '2-digit', day: '2-digit', year: 'numeric'
     })
     rows.push([date, v.vin, v.year, v.make, v.model, v.color, v.logged_by || '', v.notes || ''])
@@ -143,7 +144,7 @@ export function exportCustomerCSV(customer, vehicles) {
   const a    = document.createElement('a')
   const safe = customer.name.replace(/[^a-z0-9]/gi, '_')
   a.href     = url
-  a.download = `PDR_${safe}_${new Date().toISOString().slice(0,10)}.csv`
+  a.download = `PDR_${safe}_${todayCentralISO()}.csv`
   a.click()
   URL.revokeObjectURL(url)
 }

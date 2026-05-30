@@ -1,11 +1,13 @@
+import { formatCentralDate, todayCentralISO } from './dates.js'
+
 function fmt(iso) {
-  return new Date(iso).toLocaleDateString('en-US', {
+  return formatCentralDate(iso, {
     month: 'long', day: 'numeric', year: 'numeric'
   })
 }
 
 function fmtShort(iso) {
-  return new Date(iso).toLocaleDateString('en-US', {
+  return formatCentralDate(iso, {
     month: '2-digit', day: '2-digit', year: 'numeric'
   })
 }
@@ -25,7 +27,7 @@ function jsString(value) {
 
 export function generateAndPrintReport(customer, vehicles) {
   const sorted = [...vehicles].sort((a, b) => new Date(a.date) - new Date(b.date))
-  const today  = fmt(new Date().toISOString())
+  const today  = fmt(todayCentralISO())
   const appUrl = window.location.href
 
   const rows = sorted.map((v, i) => `

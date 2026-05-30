@@ -3,9 +3,10 @@ import { useApp } from '../context/AppContext.jsx'
 import { Card, Badge, EmptyState, ColorDot, Button } from '../components/UI.jsx'
 import { generateAndPrintReport } from '../utils/report.js'
 import { exportCustomerCSV } from '../utils/storage.js'
+import { formatCentralDate } from '../utils/dates.js'
 
 function fmtDate(iso) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return formatCentralDate(iso, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export default function VehiclesPage() {

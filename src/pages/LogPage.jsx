@@ -3,6 +3,7 @@ import { v4 as uuid } from 'uuid'
 import { useApp } from '../context/AppContext.jsx'
 import { decodeVin, isValidVin } from '../utils/nhtsa.js'
 import { checkVinExists } from '../utils/storage.js'
+import { formatCentralDate, todayCentralISO } from '../utils/dates.js'
 import { Button, Card, Label, Spinner, ColorDot, Modal } from '../components/UI.jsx'
 import VinScanner from '../components/VinScanner.jsx'
 
@@ -11,10 +12,8 @@ const COLORS = [
   'Brown / Beige','Green','Orange','Gold / Yellow','Purple','Other',
 ]
 
-const todayISO = () => new Date().toISOString().slice(0, 10)
-
 function fmtDate(iso) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return formatCentralDate(iso, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export default function LogPage() {
@@ -27,7 +26,7 @@ export default function LogPage() {
   const [color,      setColor]      = useState('')
   const [notes,      setNotes]      = useState('')
   const [custId,     setCustId]     = useState('')
-  const [date,       setDate]       = useState(todayISO())
+  const [date,       setDate]       = useState(todayCentralISO())
   const [dupWarning, setDupWarning] = useState(null)  // { first_name, log_date, color }
 
   const [scanning,   setScanning]   = useState(false)
@@ -98,7 +97,7 @@ export default function LogPage() {
 
   function resetForm(keepCustomer = true) {
     setVin(''); setMake(''); setModel(''); setYear('')
-    setColor(''); setNotes(''); setDate(todayISO())
+    setColor(''); setNotes(''); setDate(todayCentralISO())
     setDecodeErr(''); setDupWarning(null)
     if (!keepCustomer) setCustId('')
   }
