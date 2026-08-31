@@ -6,7 +6,7 @@ import { Card, Button, Label, Badge, EmptyState, Modal } from '../components/UI.
 const BLANK = { name: '', company: '', phone: '', email: '' }
 
 export default function AdminPage() {
-  const { customers, addOrUpdateCustomer, removeCustomer, vehiclesForCustomer, isAdmin } = useApp()
+  const { customers, addOrUpdateCustomer, setCustomerActive, vehiclesForCustomer, isAdmin } = useApp()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing,   setEditing]   = useState(null)
   const [form,      setForm]      = useState(BLANK)
@@ -55,14 +55,11 @@ export default function AdminPage() {
     }
   }
 
-  async function handleDelete(c) {
-    const count = vehiclesForCustomer(c.id).length
-    const warn  = count > 0 ? `\n\n${count} vehicle record(s) are linked to this customer.` : ''
-    if (!confirm(`Delete "${c.name}"?${warn}`)) return
+  async function handleToggleActive(c) {
     try {
-      await removeCustomer(c.id)
+      await setCustomerActive(c.id, !c.active)
     } catch (e) {
-      alert(e.message || 'Failed to delete.')
+      alert(e.message || 'Failed to update.')
     }
   }
 
@@ -75,7 +72,8 @@ export default function AdminPage() {
           fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: 1,
           color: 'var(--text-3)', textTransform: 'uppercase',
         }}>
-          {customers.length} customer{customers.length !== 1 ? 's' : ''}
+          {customers.filter(c => c.active).length} active
+          {customers.some(c => !c.active) ? ` · ${customers.filter(c => !c.active).length} archived` : ''}
         </span>
         <button
           onClick={openAdd}
@@ -96,10 +94,10 @@ export default function AdminPage() {
           subtitle="Add car lots or clients here. All users will be able to select them."
           action={{ label: 'Add First Customer', onPress: openAdd }}
         />
-      ) : customers.map(c => {
+      ) : [...customers].sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0)).map(c => {
         const count = vehiclesForCustomer(c.id).length
         return (
-          <Card key={c.id} style={{ marginBottom: 10 }}>
+          <Card key={c.id} style={{ marginBottom: 10, opacity: c.active ? 1 : 0.55 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start' }}>
               <div style={{
                 width: 42, height: 42, borderRadius: 21, flexShrink: 0,
@@ -113,6 +111,7 @@ export default function AdminPage() {
                   <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 800, color: 'var(--text)' }}>
                     {c.name}
                   </span>
+                  {!c.active && <Badge color="var(--text-3)">Archived</Badge>}
                 </div>
                 {c.company && <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 2 }}>{c.company}</div>}
                 <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 6 }}>
@@ -123,10 +122,11 @@ export default function AdminPage() {
               </div>
 
               <button
-                onClick={() => handleDelete(c)}
-                style={{ color: 'var(--danger)', fontSize: 18, background: 'none', border: 'none', cursor: 'pointer', paddingLeft: 8 }}
+                onClick={() => handleToggleActive(c)}
+                title={c.active ? 'Archive — hide from the Log picker' : 'Restore — show in the Log picker again'}
+                style={{ color: c.active ? 'var(--text-3)' : 'var(--success)', fontSize: 18, background: 'none', border: 'none', cursor: 'pointer', paddingLeft: 8 }}
               >
-                🗑
+                {c.active ? '📥' : '↺'}
               </button>
             </div>
           </Card>

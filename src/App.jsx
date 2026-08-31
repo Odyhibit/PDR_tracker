@@ -4,11 +4,13 @@ import AuthPage     from './pages/AuthPage.jsx'
 import LogPage      from './pages/LogPage.jsx'
 import VehiclesPage from './pages/VehiclesPage.jsx'
 import AdminPage    from './pages/AdminPage.jsx'
+import UsersPage    from './pages/UsersPage.jsx'
+import PayrollPage  from './pages/PayrollPage.jsx'
 import { Spinner }  from './components/UI.jsx'
 
 function Shell() {
-  const { session, authLoading, dataLoading, isAdmin, signOut } = useApp()
-  const [tab, setTab] = useState('log')
+  const { session, authLoading, dataLoading, isAdmin, isStaff, signOut } = useApp()
+  const [tab, setTab] = useState(null)
 
   if (authLoading) {
     return (
@@ -20,11 +22,17 @@ function Shell() {
 
   if (!session) return <AuthPage />
 
+  // Technicians (and admin, who can pinch-hit) log/see their own cars.
+  // Back office never touches the vehicle DB directly — payroll + roster only.
+  const showLogging = !isStaff || isAdmin
   const TABS = [
-    { id: 'log',      label: 'Log',       icon: '＋' },
-    { id: 'vehicles', label: 'Vehicles',  icon: '🚗' },
-    ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: '⚙️' }] : []),
+    ...(showLogging ? [{ id: 'log',      label: 'Add Vehicle', icon: '＋' }] : []),
+    ...(showLogging ? [{ id: 'vehicles', label: 'Vehicle List', icon: '🚗' }] : []),
+    ...(isStaff ? [{ id: 'payroll', label: 'Payroll', icon: '💵' }] : []),
+    ...(isStaff ? [{ id: 'users',   label: 'Users',   icon: '👤' }] : []),
+    ...(isAdmin ? [{ id: 'admin',   label: 'Customers', icon: '⚙️' }] : []),
   ]
+  const activeTab = TABS.some(t => t.id === tab) ? tab : TABS[0]?.id
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', overflow: 'hidden' }}>
@@ -40,7 +48,7 @@ function Shell() {
             fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800,
             color: 'var(--accent)', letterSpacing: -0.5,
           }}>
-            PDR TRACKER
+            PERFECTION HAIL
           </span>
           <span style={{
             fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 600,
@@ -77,9 +85,11 @@ function Shell() {
 
       {/* Page content */}
       <main style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain' }}>
-        {tab === 'log'      && <LogPage />}
-        {tab === 'vehicles' && <VehiclesPage />}
-        {tab === 'admin'    && <AdminPage />}
+        {activeTab === 'log'      && <LogPage />}
+        {activeTab === 'vehicles' && <VehiclesPage />}
+        {activeTab === 'payroll'  && <PayrollPage />}
+        {activeTab === 'users'    && <UsersPage />}
+        {activeTab === 'admin'    && <AdminPage />}
       </main>
 
       {/* Bottom tab bar */}
@@ -90,7 +100,7 @@ function Shell() {
         flexShrink: 0,
       }}>
         {TABS.map(t => {
-          const active = tab === t.id
+          const active = activeTab === t.id
           return (
             <button
               key={t.id}
@@ -101,7 +111,7 @@ function Shell() {
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
               }}
             >
-              <span style={{ fontSize: 22, lineHeight: 1 }}>{t.icon}</span>
+              <span style={{ fontSize: 22, lineHeight: 1, color: active ? 'var(--accent)' : 'var(--text-3)' }}>{t.icon}</span>
               <span style={{
                 fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700,
                 letterSpacing: 0.8, textTransform: 'uppercase',

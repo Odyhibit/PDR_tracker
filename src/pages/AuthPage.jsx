@@ -47,7 +47,7 @@ export default function AuthPage() {
     }}>
       <div style={{ textAlign: 'center', marginBottom: 40 }}>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 36, fontWeight: 800, color: 'var(--accent)', letterSpacing: -0.5 }}>
-          PDR TRACKER
+          PERFECTION HAIL
         </div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 600, color: 'var(--text-3)', letterSpacing: 2, textTransform: 'uppercase', marginTop: 4 }}>
           Hail Repair Log

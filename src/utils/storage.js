@@ -19,10 +19,12 @@ export async function saveCustomer(customer) {
   if (error) throw error
 }
 
-export async function deleteCustomer(id) {
+// Archiving (not deleting) is the normal way to retire a short-term lot —
+// it drops out of the Log page's picker but past vehicles/reports keep working.
+export async function setCustomerActive(id, active) {
   const { error } = await supabase
     .from('customers')
-    .delete()
+    .update({ active })
     .eq('id', id)
   if (error) throw error
 }
@@ -66,6 +68,10 @@ export async function checkVinExists(vin) {
 
 // ── Profile ───────────────────────────────────────────────
 
+// Loads the signed-in user's own roster row, linking it up on first
+// login: claims a pre-created row matching their email (added ahead of
+// time by admin/back office), or — if no such row exists — creates a
+// fresh technician row for them (plain self-serve signup).
 export async function getProfile() {
   const { data: { user }, error: userError } = await supabase.auth.getUser()
   if (userError) throw userError
@@ -75,21 +81,77 @@ export async function getProfile() {
     ? { first_name: user.user_metadata.first_name }
     : null
 
-  const { data, error } = await supabase
+  const { data: own, error: ownError } = await supabase
     .from('profiles')
-    .select('first_name')
+    .select('*')
     .eq('user_id', user.id)
     .maybeSingle()
-  if (error && (error.code === '42P01' || error.code === 'PGRST205')) return fallback
-  if (error) throw error
-  return data || fallback
+  if (ownError && (ownError.code === '42P01' || ownError.code === 'PGRST205')) return fallback
+  if (ownError) throw ownError
+  if (own) return own
+
+  // No row linked to this login yet — try to claim one pre-created by email
+  // (case-insensitive match, since roster entries are typed by hand).
+  const email = (user.email || '').toLowerCase()
+  const { data: claimed, error: claimError } = await supabase
+    .from('profiles')
+    .update({ user_id: user.id })
+    .is('user_id', null)
+    .eq('email', email)
+    .select('*')
+    .maybeSingle()
+  if (!claimError && claimed) return claimed
+
+  // Nothing to claim — create a plain technician row for this signup.
+  const { data: created, error: createError } = await supabase
+    .from('profiles')
+    .insert({
+      user_id: user.id,
+      email,
+      first_name: user.user_metadata?.first_name || null,
+    })
+    .select('*')
+    .maybeSingle()
+  if (createError) throw createError
+  return created || fallback
 }
 
-export async function saveProfile(firstName) {
-  const { data: { user } } = await supabase.auth.getUser()
+// Upserts a full roster row (admin/back office adding or editing a user).
+// Pass `id` when editing an existing row; omit it to pre-create a new one.
+export async function saveProfile(profile) {
   const { error } = await supabase
     .from('profiles')
-    .upsert({ user_id: user.id, first_name: firstName }, { onConflict: 'user_id' })
+    .upsert(
+      { ...profile, email: profile.email?.trim().toLowerCase() },
+      { onConflict: 'id' }
+    )
+  if (error) throw error
+}
+
+export async function getProfiles() {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .order('first_name')
+  if (error) throw error
+  return data || []
+}
+
+// ── Payroll ───────────────────────────────────────────────
+
+export async function payVehicle(vehicleId, paidDate) {
+  const { error } = await supabase.rpc('mark_vehicle_paid', {
+    p_vehicle_id: vehicleId,
+    p_paid_date: paidDate,
+  })
+  if (error) throw error
+}
+
+export async function unpayVehicle(vehicleId) {
+  const { error } = await supabase.rpc('mark_vehicle_paid', {
+    p_vehicle_id: vehicleId,
+    p_paid_date: null,
+  })
   if (error) throw error
 }
 

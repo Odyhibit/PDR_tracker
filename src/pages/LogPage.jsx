@@ -7,7 +7,7 @@ import { formatCentralDate, todayCentralISO } from '../utils/dates.js'
 import { Button, Card, Label, Spinner, ColorDot, Modal } from '../components/UI.jsx'
 import VinScanner from '../components/VinScanner.jsx'
 
-const COLORS = [
+export const COLORS = [
   'Black','White','Silver','Gray','Red','Blue',
   'Brown / Beige','Green','Orange','Gold / Yellow','Purple','Other',
 ]
@@ -39,9 +39,14 @@ export default function LogPage() {
 
   const lookingUp = useRef(false)
 
+  const activeCustomers = customers.filter(c => c.active)
+
   useEffect(() => {
-    if (lastCustomerId && !custId) setCustId(lastCustomerId)
-  }, [lastCustomerId])
+    // Don't auto-fill an archived customer — they'd need to pick a live one anyway.
+    if (lastCustomerId && !custId && activeCustomers.some(c => c.id === lastCustomerId)) {
+      setCustId(lastCustomerId)
+    }
+  }, [lastCustomerId, activeCustomers])
 
   const selectedCustomer = customers.find(c => c.id === custId)
 
@@ -106,7 +111,8 @@ export default function LogPage() {
     if (!vin || vin.trim().length !== 17) return alert('Please scan or enter a valid VIN.')
     if (!make || !model || !year)         return alert('Please decode the VIN first.')
     if (!color)                           return alert('Please select a color.')
-    if (!custId)                          return alert('Please select a customer.')
+    if (!custId || !activeCustomers.some(c => c.id === custId))
+      return alert('Please select an active customer.')
 
     setSaving(true)
     try {
@@ -116,7 +122,7 @@ export default function LogPage() {
         make, model, year, color, notes,
         customer_id: custId,
         date,
-        logged_by:  profile?.first_name || session?.user?.email || 'Unknown',
+        logged_by:  [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || session?.user?.email || 'Unknown',
         created_at: new Date().toISOString(),
       })
       await setLastCustomer(custId)
@@ -288,11 +294,11 @@ export default function LogPage() {
 
       {/* Customer picker */}
       <Modal open={custOpen} onClose={() => setCustOpen(false)} title="Select Customer">
-        {customers.length === 0 ? (
+        {activeCustomers.length === 0 ? (
           <p style={{ color: 'var(--text-3)', padding: '20px 0', textAlign: 'center' }}>
-            No customers yet — ask your administrator to add one.
+            No active customers — ask your administrator to add one.
           </p>
-        ) : customers.map(c => (
+        ) : activeCustomers.map(c => (
           <div key={c.id} onClick={() => { setCustId(c.id); setCustOpen(false) }} style={{
             padding: '14px 4px', borderBottom: '1px solid var(--border)',
             cursor: 'pointer',

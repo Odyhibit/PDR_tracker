@@ -143,7 +143,7 @@ export function generateAndPrintReport(customer, vehicles) {
   </table>
 
   <div class="footer">
-    <span>PDR Tracker</span>
+    <span>Perfection Hail</span>
     <span>Generated ${today}</span>
   </div>
   <script>

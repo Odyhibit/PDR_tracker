@@ -13,4 +13,6 @@ https://odyhibit.github.io/PDR_tracker/
 - **Customer management** — auto-defaults to last used customer
 - **PDF report** — opens print dialog, save as PDF or print
 - **CSV export** — per customer, with contact info header, opens directly in Excel/Numbers
+- **User roles** — Technician, Back Office, and Admin, managed from an in-app Users tab
+- **Payroll report** — Back Office/Admin see unpaid cars grouped by technician and mark them paid with one tap
 - **Supabase** — all data stored on Supabase backend

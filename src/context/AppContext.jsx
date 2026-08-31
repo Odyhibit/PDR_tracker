@@ -11,6 +11,7 @@ export function AppProvider({ children }) {
   const [vehicles,       setVehicles]     = useState([])
   const [lastCustomerId, setLastCidState] = useState(null)
   const [profile,        setProfile]      = useState(null)
+  const [profiles,       setProfiles]     = useState([])
   const [dataLoading,    setDataLoading]  = useState(false)
 
   // ── Auth ─────────────────────────────────────────────────
@@ -30,18 +31,22 @@ export function AppProvider({ children }) {
     if (session) loadAll()
     else {
       setCustomers([]); setVehicles([])
-      setLastCidState(null); setProfile(null)
+      setLastCidState(null); setProfile(null); setProfiles([])
     }
   }, [session])
 
   async function loadAll() {
     setDataLoading(true)
     try {
-      const [customerResult, vehicleResult, lastCustomerResult, profileResult] = await Promise.allSettled([
+      // Profile loads first — it claims/creates the roster row on first
+      // login, and vehicles' RLS visibility depends on the resulting role.
+      setProfile(await storage.getProfile())
+
+      const [customerResult, vehicleResult, lastCustomerResult, profilesResult] = await Promise.allSettled([
         storage.getCustomers(),
         storage.getVehicles(),
         storage.getLastCustomerId(),
-        storage.getProfile(),
+        storage.getProfiles(),
       ])
 
       if (customerResult.status === 'fulfilled') setCustomers(customerResult.value)
@@ -62,13 +67,15 @@ export function AppProvider({ children }) {
         setLastCidState(null)
       }
 
-      if (profileResult.status === 'fulfilled') setProfile(profileResult.value)
+      // A technician's RLS only returns their own row here — harmless no-op.
+      if (profilesResult.status === 'fulfilled') setProfiles(profilesResult.value)
       else {
-        console.error('Failed to load profile:', profileResult.reason)
-        setProfile(null)
+        console.error('Failed to load roster:', profilesResult.reason)
+        setProfiles([])
       }
     } catch (e) {
-      console.error('Failed to load data:', e)
+      console.error('Failed to load profile:', e)
+      setProfile(null)
     } finally {
       setDataLoading(false)
     }
@@ -101,8 +108,8 @@ export function AppProvider({ children }) {
     setCustomers(await storage.getCustomers())
   }, [])
 
-  const removeCustomer = useCallback(async (id) => {
-    await storage.deleteCustomer(id)
+  const setCustomerActive = useCallback(async (id, active) => {
+    await storage.setCustomerActive(id, active)
     setCustomers(await storage.getCustomers())
   }, [])
 
@@ -126,15 +133,39 @@ export function AppProvider({ children }) {
   const vehiclesForCustomer = useCallback((cid) =>
     vehicles.filter(v => v.customer_id === cid), [vehicles])
 
-  const isAdmin = session?.user?.email === import.meta.env.VITE_ADMIN_EMAIL
+  // ── Roster (roles, users) ─────────────────────────────────
+
+  const saveUserProfile = useCallback(async (p) => {
+    await storage.saveProfile(p)
+    setProfiles(await storage.getProfiles())
+  }, [])
+
+  // ── Payroll ────────────────────────────────────────────────
+
+  const payVehicle = useCallback(async (vehicleId, paidDate) => {
+    await storage.payVehicle(vehicleId, paidDate)
+    setVehicles(await storage.getVehicles())
+  }, [])
+
+  const unpayVehicle = useCallback(async (vehicleId) => {
+    await storage.unpayVehicle(vehicleId)
+    setVehicles(await storage.getVehicles())
+  }, [])
+
+  const role         = profile?.role || 'technician'
+  const isAdmin       = role === 'admin'
+  const isBackOffice  = role === 'back_office'
+  const isStaff       = isAdmin || isBackOffice // can run payroll + manage users
 
   return (
     <Ctx.Provider value={{
-      session, authLoading, dataLoading, isAdmin,
-      profile, signIn, signUp, signOut,
+      session, authLoading, dataLoading,
+      role, isAdmin, isBackOffice, isStaff,
+      profile, profiles, signIn, signUp, signOut,
       customers, lastCustomerId,
-      addOrUpdateCustomer, removeCustomer, setLastCustomer,
+      addOrUpdateCustomer, setCustomerActive, setLastCustomer,
       vehicles, addVehicle, removeVehicle, vehiclesForCustomer,
+      saveUserProfile, payVehicle, unpayVehicle,
     }}>
       {children}
     </Ctx.Provider>
