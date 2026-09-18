@@ -9,7 +9,7 @@ import PayrollPage  from './pages/PayrollPage.jsx'
 import { Spinner }  from './components/UI.jsx'
 
 function Shell() {
-  const { session, authLoading, dataLoading, isAdmin, isStaff, signOut } = useApp()
+  const { session, authLoading, dataLoading, profileError, isAdmin, isStaff, signOut } = useApp()
   const [tab, setTab] = useState(null)
 
   if (authLoading) {
@@ -21,6 +21,24 @@ function Shell() {
   }
 
   if (!session) return <AuthPage />
+
+  if (!dataLoading && profileError) {
+    return (
+      <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', background: 'var(--bg)', padding: 24 }}>
+        <div style={{ maxWidth: 420, textAlign: 'center' }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', color: 'var(--accent)' }}>Access not activated</h1>
+          <p style={{ color: 'var(--text-2)', lineHeight: 1.6 }}>
+            {profileError.code === 'PROFILE_NOT_INVITED'
+              ? profileError.message
+              : 'We could not verify your access. Please try again or contact an administrator.'}
+          </p>
+          <button onClick={signOut} style={{ marginTop: 12, padding: '10px 20px', cursor: 'pointer' }}>
+            Sign Out
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   // Technicians (and admin, who can pinch-hit) log/see their own cars.
   // Back office never touches the vehicle DB directly — payroll + roster only.

@@ -11,6 +11,7 @@ export function AppProvider({ children }) {
   const [vehicles,       setVehicles]     = useState([])
   const [lastCustomerId, setLastCidState] = useState(null)
   const [profile,        setProfile]      = useState(null)
+  const [profileError,   setProfileError] = useState(null)
   const [profiles,       setProfiles]     = useState([])
   const [dataLoading,    setDataLoading]  = useState(false)
 
@@ -31,14 +32,15 @@ export function AppProvider({ children }) {
     if (session) loadAll()
     else {
       setCustomers([]); setVehicles([])
-      setLastCidState(null); setProfile(null); setProfiles([])
+      setLastCidState(null); setProfile(null); setProfileError(null); setProfiles([])
     }
   }, [session])
 
   async function loadAll() {
     setDataLoading(true)
+    setProfileError(null)
     try {
-      // Profile loads first — it claims/creates the roster row on first
+      // Profile loads first — it claims the invited roster row on first
       // login, and vehicles' RLS visibility depends on the resulting role.
       setProfile(await storage.getProfile())
 
@@ -76,6 +78,7 @@ export function AppProvider({ children }) {
     } catch (e) {
       console.error('Failed to load profile:', e)
       setProfile(null)
+      setProfileError(e)
     } finally {
       setDataLoading(false)
     }
@@ -161,7 +164,7 @@ export function AppProvider({ children }) {
     <Ctx.Provider value={{
       session, authLoading, dataLoading,
       role, isAdmin, isBackOffice, isStaff,
-      profile, profiles, signIn, signUp, signOut,
+      profile, profileError, profiles, signIn, signUp, signOut,
       customers, lastCustomerId,
       addOrUpdateCustomer, setCustomerActive, setLastCustomer,
       vehicles, addVehicle, removeVehicle, vehiclesForCustomer,

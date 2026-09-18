@@ -131,8 +131,8 @@ export default function AuthPage() {
 
       <p style={{ marginTop: 20, fontSize: 12, color: 'var(--text-3)', textAlign: 'center' }}>
         {mode === 'login'
-          ? 'Need access? Ask your administrator to create an account.'
-          : 'Already have an account? Switch to Log In above.'}
+          ? 'Need access? Ask your administrator to add your email first.'
+          : 'Use the exact email your administrator added. Already registered? Switch to Log In.'}
       </p>
     </div>
   )

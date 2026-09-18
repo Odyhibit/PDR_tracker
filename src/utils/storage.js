@@ -70,8 +70,8 @@ export async function checkVinExists(vin) {
 
 // Loads the signed-in user's own roster row, linking it up on first
 // login: claims a pre-created row matching their email (added ahead of
-// time by admin/back office), or — if no such row exists — creates a
-// fresh technician row for them (plain self-serve signup).
+// time by admin/back office). Accounts without a roster invitation are
+// deliberately rejected; authorization is enforced again by database RLS.
 export async function getProfile() {
   const { data: { user }, error: userError } = await supabase.auth.getUser()
   if (userError) throw userError
@@ -97,7 +97,7 @@ export async function getProfile() {
     .from('profiles')
     .update({ user_id: user.id })
     .is('user_id', null)
-    .eq('email', email)
+    .ilike('email', email)
     .select('*')
     .maybeSingle()
 
@@ -105,31 +105,9 @@ export async function getProfile() {
   if (claimError) console.error('Profile claim failed:', claimError)
   if (!claimError && claimed) return claimed
 
-  // Nothing to claim — create a plain technician row for this signup.
-  const { data: created, error: createError } = await supabase
-    .from('profiles')
-    .insert({
-      user_id: user.id,
-      email,
-      first_name: user.user_metadata?.first_name || null,
-    })
-    .select('*')
-    .maybeSingle()
-  if (!createError) return created || fallback
-
-  // A row with this email already exists (the claim above should have
-  // matched it but didn't — e.g. a race with whoever pre-created it) —
-  // rather than stranding the login with no profile, check again for an
-  // own row and retry the claim once before giving up.
-  if (createError.code === '23505') {
-    const { data: retryOwn } = await supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle()
-    if (retryOwn) return retryOwn
-    const { data: retryClaimed, error: retryClaimError } = await claim()
-    if (!retryClaimError && retryClaimed) return retryClaimed
-    console.error('Profile retry-claim failed:', retryClaimError)
-  }
-  console.error('Profile create failed:', createError)
-  throw createError
+  const error = new Error('This email has not been invited. Ask an administrator to add it on the Users page.')
+  error.code = 'PROFILE_NOT_INVITED'
+  throw error
 }
 
 // Upserts a full roster row (admin/back office adding or editing a user).
