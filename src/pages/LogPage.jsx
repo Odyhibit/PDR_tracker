@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext.jsx'
 import { decodeVin, isValidVin } from '../utils/nhtsa.js'
 import { checkVinExists } from '../utils/storage.js'
 import { formatCentralDate, todayCentralISO } from '../utils/dates.js'
+import { isShopLocation } from '../utils/locations.js'
 import { Button, Card, Label, Spinner, ColorDot, Modal } from '../components/UI.jsx'
 import VinScanner from '../components/VinScanner.jsx'
 
@@ -27,6 +28,7 @@ export default function LogPage() {
   const [notes,      setNotes]      = useState('')
   const [custId,     setCustId]     = useState('')
   const [date,       setDate]       = useState(todayCentralISO())
+  const [roNumber,   setRoNumber]   = useState('')
   const [dupWarning, setDupWarning] = useState(null)  // { first_name, log_date, color }
 
   const [scanning,   setScanning]   = useState(false)
@@ -49,6 +51,7 @@ export default function LogPage() {
   }, [lastCustomerId, activeCustomers])
 
   const selectedCustomer = customers.find(c => c.id === custId)
+  const roRequired = isShopLocation(selectedCustomer)
 
   async function handleVinScanned(scannedVin) {
     setScanning(false)
@@ -103,7 +106,7 @@ export default function LogPage() {
   function resetForm(keepCustomer = true) {
     setVin(''); setMake(''); setModel(''); setYear('')
     setColor(''); setNotes(''); setDate(todayCentralISO())
-    setDecodeErr(''); setDupWarning(null)
+    setDecodeErr(''); setDupWarning(null); setRoNumber('')
     if (!keepCustomer) setCustId('')
   }
 
@@ -113,6 +116,7 @@ export default function LogPage() {
     if (!color)                           return alert('Please select a color.')
     if (!custId || !activeCustomers.some(c => c.id === custId))
       return alert('Please select an active customer.')
+    if (roRequired && !roNumber.trim())   return alert('Please enter the RO number.')
 
     setSaving(true)
     try {
@@ -122,6 +126,7 @@ export default function LogPage() {
         make, model, year, color, notes,
         customer_id: custId,
         date,
+        ro_number:  roNumber.trim() || null,
         logged_by:  [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || session?.user?.email || 'Unknown',
         created_at: new Date().toISOString(),
       })
@@ -158,6 +163,21 @@ export default function LogPage() {
       </div>
       {custId && lastCustomerId === custId && (
         <div style={{ fontSize: 11, color: 'var(--success)', marginTop: 4, marginLeft: 2 }}>✓ Last used</div>
+      )}
+
+      {/* RO number — only the shop's own location uses these */}
+      {roRequired && (
+        <>
+          <Label>RO Number</Label>
+          <input
+            value={roNumber}
+            onChange={e => setRoNumber(e.target.value.replace(/\D/g, '').slice(0, 5))}
+            placeholder="e.g. 4521"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={5}
+          />
+        </>
       )}
 
       {/* Date */}

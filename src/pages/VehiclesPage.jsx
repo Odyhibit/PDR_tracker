@@ -4,6 +4,7 @@ import { Card, Badge, EmptyState, ColorDot, Button, Label, Modal } from '../comp
 import { generateAndPrintReport } from '../utils/report.js'
 import { exportCustomerCSV } from '../utils/storage.js'
 import { formatCentralDate } from '../utils/dates.js'
+import { isShopLocation } from '../utils/locations.js'
 import { COLORS } from './LogPage.jsx'
 
 function fmtDate(iso) {
@@ -27,10 +28,14 @@ export default function VehiclesPage() {
 
   function openEdit(v) {
     setEditing(v)
-    setForm({ customer_id: v.customer_id || '', date: v.date, color: v.color || '', notes: v.notes || '' })
+    setForm({ customer_id: v.customer_id || '', date: v.date, color: v.color || '', notes: v.notes || '', ro_number: v.ro_number || '' })
   }
 
+  const formCustomer = form ? customers.find(c => c.id === form.customer_id) : null
+  const roRequired   = isShopLocation(formCustomer)
+
   async function handleSaveEdit() {
+    if (roRequired && !form.ro_number.trim()) return alert('Please enter the RO number.')
     setSaving(true)
     try {
       // Built explicitly (not spread from `editing`) — that object carries a
@@ -49,6 +54,7 @@ export default function VehiclesPage() {
         date:        form.date,
         color:       form.color,
         notes:       form.notes,
+        ro_number:   form.ro_number.trim() || null,
       })
       setEditing(null)
     } catch (e) {
@@ -209,6 +215,20 @@ export default function VehiclesPage() {
               ))}
             </select>
 
+            {roRequired && (
+              <>
+                <Label>RO Number</Label>
+                <input
+                  value={form.ro_number}
+                  onChange={e => setForm({ ...form, ro_number: e.target.value.replace(/\D/g, '').slice(0, 5) })}
+                  placeholder="e.g. 4521"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={5}
+                />
+              </>
+            )}
+
             <Label>Date</Label>
             <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={{ colorScheme: 'dark' }} />
 
@@ -222,7 +242,7 @@ export default function VehiclesPage() {
             <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={3} />
 
             <div style={{ marginTop: 20 }}>
-              <Button onClick={handleSaveEdit} loading={saving} disabled={!form.customer_id || !form.color}>
+              <Button onClick={handleSaveEdit} loading={saving} disabled={!form.customer_id || !form.color || (roRequired && !form.ro_number.trim())}>
                 Save Changes
               </Button>
             </div>
@@ -256,6 +276,7 @@ function VehicleCard({ vehicle: v, onEdit, onDelete }) {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }} onClick={onEdit}>
         <Chip><ColorDot color={v.color} /> {v.color}</Chip>
         <Chip>📅 {fmtDate(v.date)}</Chip>
+        {v.ro_number && <Chip>RO {v.ro_number}</Chip>}
         {v.paid_date && <Chip>💵 Paid {fmtDate(v.paid_date)}</Chip>}
       </div>
 

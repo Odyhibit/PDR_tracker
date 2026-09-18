@@ -93,13 +93,16 @@ export async function getProfile() {
   // No row linked to this login yet — try to claim one pre-created by email
   // (case-insensitive match, since roster entries are typed by hand).
   const email = (user.email || '').toLowerCase()
-  const { data: claimed, error: claimError } = await supabase
+  const claim = () => supabase
     .from('profiles')
     .update({ user_id: user.id })
     .is('user_id', null)
     .eq('email', email)
     .select('*')
     .maybeSingle()
+
+  const { data: claimed, error: claimError } = await claim()
+  if (claimError) console.error('Profile claim failed:', claimError)
   if (!claimError && claimed) return claimed
 
   // Nothing to claim — create a plain technician row for this signup.
@@ -112,8 +115,21 @@ export async function getProfile() {
     })
     .select('*')
     .maybeSingle()
-  if (createError) throw createError
-  return created || fallback
+  if (!createError) return created || fallback
+
+  // A row with this email already exists (the claim above should have
+  // matched it but didn't — e.g. a race with whoever pre-created it) —
+  // rather than stranding the login with no profile, check again for an
+  // own row and retry the claim once before giving up.
+  if (createError.code === '23505') {
+    const { data: retryOwn } = await supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle()
+    if (retryOwn) return retryOwn
+    const { data: retryClaimed, error: retryClaimError } = await claim()
+    if (!retryClaimError && retryClaimed) return retryClaimed
+    console.error('Profile retry-claim failed:', retryClaimError)
+  }
+  console.error('Profile create failed:', createError)
+  throw createError
 }
 
 // Upserts a full roster row (admin/back office adding or editing a user).
@@ -153,6 +169,26 @@ export async function unpayVehicle(vehicleId) {
     p_paid_date: null,
   })
   if (error) throw error
+}
+
+// Paginated, settled payout history — cars whose paid_date has already
+// passed. Fetched separately from getVehicles() (which the rest of the app
+// keeps fully loaded) so this list can grow indefinitely without bloating
+// what's held in memory on every login.
+export async function getPaidVehiclesPage({ page = 0, pageSize = 25, customerId } = {}) {
+  const from = page * pageSize
+  const to   = from + pageSize - 1
+  let query = supabase
+    .from('vehicles')
+    .select('*, customers(name, company)', { count: 'exact' })
+    .not('paid_date', 'is', null)
+    .lt('paid_date', todayCentralISO())
+    .order('paid_date', { ascending: false })
+    .range(from, to)
+  if (customerId) query = query.eq('customer_id', customerId)
+  const { data, error, count } = await query
+  if (error) throw error
+  return { rows: data || [], count: count || 0 }
 }
 
 // ── User Preferences (last customer) ──────────────────────

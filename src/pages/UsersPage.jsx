@@ -55,7 +55,10 @@ export default function UsersPage() {
     try {
       await saveUserProfile({
         id:         editing?.id || uuid(),
-        user_id:    editing?.user_id ?? null,
+        // user_id is deliberately omitted — it's only ever set by the app's
+        // own login/claim logic (getProfile() in storage.js). Sending it
+        // here from a possibly-stale cached copy could unlink an account
+        // that claimed this row after the edit form was opened.
         email:      form.email.trim(),
         first_name: form.first_name.trim(),
         last_name:  form.last_name.trim() || null,
