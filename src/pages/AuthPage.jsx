@@ -1,32 +1,51 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useApp } from '../context/AppContext.jsx'
 import { Button, Label } from '../components/UI.jsx'
 
 export default function AuthPage() {
-  const { signIn, signUp } = useApp()
-  const [mode,      setMode]      = useState('login')
+  const {
+    signIn, signUp, passwordRecovery, requestPasswordReset, updatePassword,
+    authMessage, clearAuthMessage,
+  } = useApp()
+  const [mode,      setMode]      = useState(passwordRecovery ? 'recovery' : 'login')
   const [firstName, setFirstName] = useState('')
   const [email,     setEmail]     = useState('')
   const [password,  setPassword]  = useState('')
+  const [passwordConfirmation, setPasswordConfirmation] = useState('')
   const [loading,   setLoading]   = useState(false)
   const [error,     setError]     = useState('')
   const [message,   setMessage]   = useState('')
 
+  useEffect(() => {
+    if (passwordRecovery) setMode('recovery')
+  }, [passwordRecovery])
+
   async function handleSubmit() {
     setError(''); setMessage('')
-    if (!email || !password) { setError('Email and password are required.'); return }
-    if (password.length < 6) { setError('Password must be at least 6 characters.'); return }
+    if (mode === 'forgot') {
+      if (!email) { setError('Email is required.'); return }
+    } else {
+      if (mode !== 'recovery' && !email) { setError('Email is required.'); return }
+      if (!password) { setError('Password is required.'); return }
+      if (password.length < 6) { setError('Password must be at least 6 characters.'); return }
+      if (mode === 'recovery' && password !== passwordConfirmation) { setError('Passwords do not match.'); return }
+    }
     if (mode === 'signup' && !firstName.trim()) { setError('First name is required.'); return }
 
     setLoading(true)
     try {
       if (mode === 'login') {
         await signIn(email, password)
-      } else {
+      } else if (mode === 'signup') {
         await signUp(email, password, firstName.trim())
         setMessage('Account created! Check your email to confirm, then log in.')
         setMode('login')
         setFirstName('')
+      } else if (mode === 'forgot') {
+        await requestPasswordReset(email)
+        setMessage('If an account exists for that email, a password reset link is on its way.')
+      } else {
+        await updatePassword(password)
       }
     } catch (e) {
       setError(e.message || 'Something went wrong.')
@@ -36,7 +55,8 @@ export default function AuthPage() {
   }
 
   function switchMode(m) {
-    setMode(m); setError(''); setMessage(''); setFirstName('')
+    setMode(m); setError(''); setMessage(''); setFirstName(''); setPassword(''); setPasswordConfirmation('')
+    clearAuthMessage()
   }
 
   return (
@@ -60,7 +80,7 @@ export default function AuthPage() {
         width: '100%', maxWidth: 380,
       }}>
         {/* Tab toggle */}
-        <div style={{ display: 'flex', background: 'var(--bg-3)', borderRadius: 'var(--radius)', padding: 3, marginBottom: 24 }}>
+        {mode !== 'forgot' && mode !== 'recovery' && <div style={{ display: 'flex', background: 'var(--bg-3)', borderRadius: 'var(--radius)', padding: 3, marginBottom: 24 }}>
           {['login', 'signup'].map(m => (
             <button key={m} onClick={() => switchMode(m)} style={{
               flex: 1, padding: '9px 0',
@@ -74,7 +94,20 @@ export default function AuthPage() {
               {m === 'login' ? 'Log In' : 'Sign Up'}
             </button>
           ))}
-        </div>
+        </div>}
+
+        {(mode === 'forgot' || mode === 'recovery') && (
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: 'var(--text)' }}>
+              {mode === 'forgot' ? 'Reset Password' : 'Choose a New Password'}
+            </div>
+            <p style={{ marginTop: 6, fontSize: 13, color: 'var(--text-3)', lineHeight: 1.5 }}>
+              {mode === 'forgot'
+                ? 'Enter your email and we’ll send you a secure reset link.'
+                : 'Enter the new password you want to use for your account.'}
+            </p>
+          </div>
+        )}
 
         {/* First name — signup only */}
         {mode === 'signup' && (
@@ -90,49 +123,79 @@ export default function AuthPage() {
           </>
         )}
 
-        <Label>Email</Label>
-        <input
-          type="email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          placeholder="you@example.com"
-          autoCapitalize="none"
-          autoCorrect="off"
-          autoFocus={mode === 'login'}
-          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-        />
+        {mode !== 'recovery' && <>
+          <Label>Email</Label>
+          <input
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            autoCapitalize="none"
+            autoCorrect="off"
+            autoFocus={mode === 'login' || mode === 'forgot'}
+            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+          />
+        </>}
 
-        <Label>Password</Label>
-        <input
-          type="password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          placeholder="••••••••"
-          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-        />
+        {mode !== 'forgot' && <>
+          <Label>{mode === 'recovery' ? 'New Password' : 'Password'}</Label>
+          <input
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="••••••••"
+            autoFocus={mode === 'recovery'}
+            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+          />
+        </>}
+
+        {mode === 'recovery' && <>
+          <Label>Confirm New Password</Label>
+          <input
+            type="password"
+            value={passwordConfirmation}
+            onChange={e => setPasswordConfirmation(e.target.value)}
+            placeholder="••••••••"
+            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+          />
+        </>}
+
+        {mode === 'login' && (
+          <button onClick={() => switchMode('forgot')} style={{ display: 'block', margin: '12px 0 0 auto', padding: 0, background: 'none', border: 'none', color: 'var(--accent)', fontSize: 13, cursor: 'pointer' }}>
+            Forgot password?
+          </button>
+        )}
 
         {error && (
           <div style={{ marginTop: 12, padding: '10px 12px', background: 'rgba(224,82,82,0.12)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--danger)', lineHeight: 1.5 }}>
             ⚠ {error}
           </div>
         )}
-        {message && (
+        {(message || authMessage) && (
           <div style={{ marginTop: 12, padding: '10px 12px', background: 'rgba(61,186,122,0.12)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--success)', lineHeight: 1.5 }}>
-            ✓ {message}
+            ✓ {message || authMessage}
           </div>
         )}
 
         <div style={{ marginTop: 20 }}>
           <Button onClick={handleSubmit} loading={loading}>
-            {mode === 'login' ? 'Log In' : 'Create Account'}
+            {mode === 'login' ? 'Log In' : mode === 'signup' ? 'Create Account' : mode === 'forgot' ? 'Send Reset Link' : 'Update Password'}
           </Button>
         </div>
+
+        {mode === 'forgot' && (
+          <button onClick={() => switchMode('login')} style={{ display: 'block', margin: '16px auto 0', padding: 0, background: 'none', border: 'none', color: 'var(--text-2)', fontSize: 13, cursor: 'pointer' }}>
+            Back to Log In
+          </button>
+        )}
       </div>
 
       <p style={{ marginTop: 20, fontSize: 12, color: 'var(--text-3)', textAlign: 'center' }}>
         {mode === 'login'
           ? 'Need access? Ask your administrator to add your email first.'
-          : 'Use the exact email your administrator added. Already registered? Switch to Log In.'}
+          : mode === 'signup'
+            ? 'Use the exact email your administrator added. Already registered? Switch to Log In.'
+            : ''}
       </p>
     </div>
   )

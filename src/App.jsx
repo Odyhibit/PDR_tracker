@@ -9,7 +9,7 @@ import PayrollPage  from './pages/PayrollPage.jsx'
 import { Spinner }  from './components/UI.jsx'
 
 function Shell() {
-  const { session, authLoading, dataLoading, profileError, isAdmin, isStaff, signOut } = useApp()
+  const { session, authLoading, dataLoading, profileError, isAdmin, isStaff, signOut, passwordRecovery } = useApp()
   const [tab, setTab] = useState(null)
 
   if (authLoading) {
@@ -20,7 +20,7 @@ function Shell() {
     )
   }
 
-  if (!session) return <AuthPage />
+  if (passwordRecovery || !session) return <AuthPage />
 
   if (!dataLoading && profileError) {
     return (

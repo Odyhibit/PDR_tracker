@@ -14,6 +14,10 @@ export function AppProvider({ children }) {
   const [profileError,   setProfileError] = useState(null)
   const [profiles,       setProfiles]     = useState([])
   const [dataLoading,    setDataLoading]  = useState(false)
+  const [passwordRecovery, setPasswordRecovery] = useState(() =>
+    window.location.hash.includes('type=recovery')
+  )
+  const [authMessage, setAuthMessage] = useState('')
 
   // ── Auth ─────────────────────────────────────────────────
 
@@ -22,8 +26,9 @@ export function AppProvider({ children }) {
       setSession(session)
       setAuthLoading(false)
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session)
+      if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true)
     })
     return () => subscription.unsubscribe()
   }, [])
@@ -100,6 +105,21 @@ export function AppProvider({ children }) {
     if (error) throw error
   }, [])
 
+  const requestPasswordReset = useCallback(async (email) => {
+    const redirectTo = `${window.location.origin}${window.location.pathname}`
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+    if (error) throw error
+  }, [])
+
+  const updatePassword = useCallback(async (password) => {
+    const { error } = await supabase.auth.updateUser({ password })
+    if (error) throw error
+
+    setPasswordRecovery(false)
+    setAuthMessage('Password updated. You can now log in with your new password.')
+    await supabase.auth.signOut()
+  }, [])
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
   }, [])
@@ -165,6 +185,8 @@ export function AppProvider({ children }) {
       session, authLoading, dataLoading,
       role, isAdmin, isBackOffice, isStaff,
       profile, profileError, profiles, signIn, signUp, signOut,
+      passwordRecovery, requestPasswordReset, updatePassword,
+      authMessage, clearAuthMessage: () => setAuthMessage(''),
       customers, lastCustomerId,
       addOrUpdateCustomer, setCustomerActive, setLastCustomer,
       vehicles, addVehicle, removeVehicle, vehiclesForCustomer,
