@@ -65,6 +65,7 @@ export default function VinScanner({ onScanned, onClose }) {
   const [ocrErr,  setOcrErr]  = useState('')
   const [stillBusy, setStillBusy] = useState(false)
   const [stillErr,  setStillErr]  = useState('')
+  const [streamRes, setStreamRes] = useState('') // actual negotiated camera resolution, for diagnosing "why is this blurry"
   // Degrees to counter-rotate the whole overlay when the OS auto-rotates to
   // landscape — see the orientation-compensation effect below.
   const [compensateDeg, setCompensateDeg] = useState(0)
@@ -111,8 +112,11 @@ export default function VinScanner({ onScanned, onClose }) {
     navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: 'environment',
-        width:  { ideal: 1920 },
-        height: { ideal: 1080 },
+        // `ideal` is a soft preference, not a requirement — the browser can
+        // still negotiate down on a device that can't do 4K, so this never
+        // throws, it just asks for as much as the hardware will give us.
+        width:  { ideal: 3840 },
+        height: { ideal: 2160 },
         advanced: [{ focusMode: 'continuous' }],
       }
     }).then(stream => {
@@ -120,6 +124,9 @@ export default function VinScanner({ onScanned, onClose }) {
       streamRef.current = stream
       videoRef.current.srcObject = stream
       videoRef.current.play().catch(() => {})
+      const track = stream.getVideoTracks()[0]
+      const settings = track?.getSettings?.()
+      if (settings?.width) setStreamRes(`${settings.width}×${settings.height}`)
       pollId = setInterval(() => {
         if (modeRef.current !== 'scan') return
         const canvas = cropElementToCanvas(barcodeGuideRef.current, 2)
@@ -521,14 +528,23 @@ export default function VinScanner({ onScanned, onClose }) {
           color: '#fff', fontSize: 28, lineHeight: 1,
           background: 'none', border: 'none', cursor: 'pointer', padding: 4,
         }}>✕</button>
-        <span style={{
-          color: '#fff', fontFamily: 'var(--font-display)',
-          fontSize: 18, fontWeight: 700, letterSpacing: 1,
-        }}>
-          {mode === 'scan'       && 'SCAN VIN BARCODE'}
-          {mode === 'capture'    && 'CAPTURE VIN TEXT'}
-          {mode === 'processing' && 'READING TEXT…'}
-          {mode === 'review'     && 'CONFIRM VIN'}
+        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <span style={{
+            color: '#fff', fontFamily: 'var(--font-display)',
+            fontSize: 18, fontWeight: 700, letterSpacing: 1,
+          }}>
+            {mode === 'scan'       && 'SCAN VIN BARCODE'}
+            {mode === 'capture'    && 'CAPTURE VIN TEXT'}
+            {mode === 'processing' && 'READING TEXT…'}
+            {mode === 'review'     && 'CONFIRM VIN'}
+          </span>
+          {/* Actual negotiated camera resolution — temporary diagnostic so we
+              can see what the hardware actually gave us vs. what we asked for. */}
+          {cameraLive && streamRes && (
+            <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 10, marginTop: 2 }}>
+              {streamRes}
+            </span>
+          )}
         </span>
         {cameraLive ? (
           <button onClick={toggleTorch} style={{
