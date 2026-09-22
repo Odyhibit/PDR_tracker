@@ -90,15 +90,21 @@ export function AppProvider({ children }) {
   }
 
   // ── Auth actions ──────────────────────────────────────────
+  // Emails are always trimmed + lowercased before hitting Supabase Auth —
+  // a stray leading/trailing space (easy to pick up from a mobile keyboard
+  // or autofill) would otherwise get baked into auth.users.email and the
+  // JWT's email claim permanently, silently breaking the invited-profile
+  // claim match in the DB (which is case-insensitive but not whitespace-
+  // insensitive) even though the invited row's email looks identical.
 
   const signIn = useCallback(async (email, password) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password })
     if (error) throw error
   }, [])
 
   const signUp = useCallback(async (email, password, firstName) => {
     const { error } = await supabase.auth.signUp({
-      email,
+      email: email.trim().toLowerCase(),
       password,
       options: { data: { first_name: firstName } }
     })
@@ -107,7 +113,7 @@ export function AppProvider({ children }) {
 
   const requestPasswordReset = useCallback(async (email) => {
     const redirectTo = `${window.location.origin}${window.location.pathname}`
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo })
     if (error) throw error
   }, [])
 

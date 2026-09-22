@@ -92,7 +92,7 @@ export async function getProfile() {
 
   // No row linked to this login yet — try to claim one pre-created by email
   // (case-insensitive match, since roster entries are typed by hand).
-  const email = (user.email || '').toLowerCase()
+  const email = (user.email || '').trim().toLowerCase()
   const claim = () => supabase
     .from('profiles')
     .update({ user_id: user.id })
