@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useApp } from '../context/AppContext.jsx'
-import { Card, Badge, EmptyState, ColorDot, Label } from '../components/UI.jsx'
+import { Card, Badge, EmptyState, ColorDot, Label, Button } from '../components/UI.jsx'
 import { formatCentralDate, upcomingFridayCentralISO, todayCentralISO } from '../utils/dates.js'
 import { isShopLocation } from '../utils/locations.js'
 import { getPaidVehiclesPage } from '../utils/storage.js'
@@ -17,6 +17,9 @@ export default function PayrollPage() {
   const [payDate, setPayDate] = useState(upcomingFridayCentralISO())
   const [busy,    setBusy]    = useState({}) // vehicleId -> bool, disables the button mid-request
   const [roSearch, setRoSearch] = useState('')
+  const [editingPaidId, setEditingPaidId] = useState(null)
+  const [editedPayDate, setEditedPayDate] = useState('')
+  const [savingPaidDate, setSavingPaidDate] = useState(false)
 
   // Only the shop's own cars go through this weekly payout — cars logged at
   // other lots/dealers get paid through a separate (slower) process, so they
@@ -37,6 +40,7 @@ export default function PayrollPage() {
       const { rows, count } = await getPaidVehiclesPage({ page, pageSize: PAGE_SIZE, customerId })
       setPaidRows(rows)
       setPaidCount(count)
+      return { rows, count }
     } catch (e) {
       alert(e.message || 'Failed to load paid cars.')
     } finally {
@@ -123,6 +127,23 @@ export default function PayrollPage() {
       alert(e.message || 'Failed to undo payout.')
     } finally {
       setBusy(s => ({ ...s, [vehicleId]: false }))
+    }
+  }
+
+  async function handleSavePaidDate() {
+    if (!editingPaidId || !editedPayDate) return
+    setSavingPaidDate(true)
+    try {
+      await payVehicle(editingPaidId, editedPayDate)
+      setEditingPaidId(null)
+      const result = await loadPaidPage(paidPage, shopCustomer.id)
+      if (result && paidPage > 0 && paidPage * PAGE_SIZE >= result.count) {
+        setPaidPage(Math.max(0, Math.ceil(result.count / PAGE_SIZE) - 1))
+      }
+    } catch (e) {
+      alert(e.message || 'Failed to update pay date.')
+    } finally {
+      setSavingPaidDate(false)
     }
   }
 
@@ -308,6 +329,53 @@ export default function PayrollPage() {
                   {v.ro_number && <Chip>RO {v.ro_number}</Chip>}
                   <Chip>💵 Paid {fmtDate(v.paid_date)}</Chip>
                 </div>
+                {editingPaidId === v.id ? (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                    <Label>Correct Pay Date</Label>
+                    <input
+                      type="date"
+                      value={editedPayDate}
+                      onChange={e => setEditedPayDate(e.target.value)}
+                      style={{ colorScheme: 'dark' }}
+                    />
+                    {editedPayDate >= today && (
+                      <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
+                        Dates today or later move this vehicle to the Unpaid tab until the payout date passes.
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                      <Button
+                        onClick={handleSavePaidDate}
+                        loading={savingPaidDate}
+                        disabled={!editedPayDate || editedPayDate === v.paid_date}
+                        style={{ flex: 1 }}
+                      >
+                        Save Date
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => setEditingPaidId(null)}
+                        disabled={savingPaidDate}
+                        style={{ flex: 1 }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setEditingPaidId(v.id); setEditedPayDate(v.paid_date) }}
+                    style={{
+                      marginTop: 12, padding: '7px 12px',
+                      background: 'var(--surface-2)', border: '1px solid var(--border)',
+                      color: 'var(--text-2)', borderRadius: 'var(--radius)',
+                      fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Edit Pay Date
+                  </button>
+                )}
               </Card>
             )
           })}
