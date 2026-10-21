@@ -18,7 +18,7 @@ function fmtDate(iso) {
 }
 
 export default function LogPage() {
-  const { customers, lastCustomerId, addVehicle, setLastCustomer, profile, session } = useApp()
+  const { customers, lastCustomerId, addVehicle, setLastCustomer, profile, profiles, session, isAdmin } = useApp()
 
   const [vin,        setVin]        = useState('')
   const [make,       setMake]       = useState('')
@@ -29,6 +29,7 @@ export default function LogPage() {
   const [custId,     setCustId]     = useState('')
   const [date,       setDate]       = useState(todayCentralISO())
   const [roNumber,   setRoNumber]   = useState('')
+  const [ownerId,    setOwnerId]    = useState('')
   const [dupWarning, setDupWarning] = useState(null)  // { first_name, log_date, color }
 
   const [scanning,   setScanning]   = useState(false)
@@ -42,6 +43,11 @@ export default function LogPage() {
   const lookingUp = useRef(false)
 
   const activeCustomers = customers.filter(c => c.active)
+  const roster = profiles.some(p => p.user_id === session?.user?.id)
+    ? profiles
+    : profile ? [profile, ...profiles] : profiles
+  const selectedOwnerId = isAdmin ? (ownerId || session?.user?.id) : session?.user?.id
+  const selectedOwner = roster.find(p => p.user_id === selectedOwnerId)
 
   useEffect(() => {
     // Don't auto-fill an archived customer — they'd need to pick a live one anyway.
@@ -117,6 +123,8 @@ export default function LogPage() {
     if (!custId || !activeCustomers.some(c => c.id === custId))
       return alert('Please select an active customer.')
     if (roRequired && !roNumber.trim())   return alert('Please enter the RO number.')
+    if (isAdmin && (!selectedOwnerId || !selectedOwner))
+      return alert('Please select a user who has signed up.')
 
     setSaving(true)
     try {
@@ -125,9 +133,10 @@ export default function LogPage() {
         vin:        vin.trim().toUpperCase(),
         make, model, year, color, notes,
         customer_id: custId,
+        user_id:     selectedOwnerId,
         date,
         ro_number:  roNumber.trim() || null,
-        logged_by:  [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || session?.user?.email || 'Unknown',
+        logged_by:  [selectedOwner?.first_name, selectedOwner?.last_name].filter(Boolean).join(' ') || selectedOwner?.email || session?.user?.email || 'Unknown',
         created_at: new Date().toISOString(),
       })
       await setLastCustomer(custId)
@@ -146,6 +155,30 @@ export default function LogPage() {
 
   return (
     <div style={{ padding: '16px 16px 120px', maxWidth: 520, margin: '0 auto' }}>
+
+      {isAdmin && (
+        <>
+          <Label>Vehicle for</Label>
+          <select value={selectedOwnerId || ''} onChange={e => setOwnerId(e.target.value)}>
+            {roster.map(p => (
+              <option key={p.id} value={p.user_id || ''} disabled={!p.user_id}>
+                {[p.first_name, p.last_name].filter(Boolean).join(' ') || p.email} · {p.email}
+                {!p.user_id ? ' (not signed up yet)' : ''}
+              </option>
+            ))}
+          </select>
+          {roster.some(p => !p.user_id) && (
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
+              Users must sign up before a vehicle can be assigned to them.
+            </div>
+          )}
+          {selectedOwnerId && selectedOwnerId !== session?.user?.id && (
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
+              This vehicle will appear in that user’s Vehicle List and in Payroll.
+            </div>
+          )}
+        </>
+      )}
 
       {/* Customer */}
       <Label>Customer / Lot</Label>

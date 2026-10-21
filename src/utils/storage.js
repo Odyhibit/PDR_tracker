@@ -44,7 +44,7 @@ export async function saveVehicle(vehicle) {
   const { data: { user } } = await supabase.auth.getUser()
   const { error } = await supabase
     .from('vehicles')
-    .upsert({ ...vehicle, user_id: user.id }, { onConflict: 'id' })
+    .upsert({ ...vehicle, user_id: vehicle.user_id || user.id }, { onConflict: 'id' })
   if (error) throw error
 }
 
