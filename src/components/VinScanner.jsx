@@ -5,6 +5,19 @@ import {
 } from '@zxing/library'
 
 const VIN_RE    = /[A-HJ-NPR-Z0-9]{17}/i
+// Pulls a VIN out of decoded barcode/QR text. QR codes (e.g. GM door jambs) may
+// hold a URL or labelled text with the VIN embedded, so look for a standalone
+// 17-char VIN token first; only then fall back to stripping punctuation, which
+// handles barcodes that decode with stray start/stop or separator characters.
+function extractVin(raw) {
+  const upper = raw.toUpperCase()
+  const token = upper.match(/(?<![A-Z0-9])[A-HJ-NPR-Z0-9]{17}(?![A-Z0-9])/)
+  if (token) return token[0]
+  const cleaned = upper.replace(/[^A-HJ-NPR-Z0-9]/g, '')
+  const match   = cleaned.match(VIN_RE)
+  return match ? match[0] : null
+}
+
 const VIN_CHARS = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789' // VIN alphabet — no I, O, or Q
 
 // Secondary fallback only — testing against real photos showed the dominant
@@ -93,11 +106,12 @@ export default function VinScanner({ onScanned, onClose }) {
     }
     lockPortrait()
 
-    // Doorjamb VIN stickers use Code 39 (a few use Code 128) — restricting the
-    // formats and forcing TRY_HARDER makes decoding more tolerant of blur/skew.
+    // Doorjamb VIN stickers use Code 39 (a few use Code 128), and some vehicles
+    // (e.g. Chevy) use a QR code instead — restricting the formats and forcing
+    // TRY_HARDER makes decoding more tolerant of blur/skew.
     const hints = new Map()
     hints.set(DecodeHintType.TRY_HARDER, true)
-    hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.CODE_39, BarcodeFormat.CODE_128])
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.CODE_39, BarcodeFormat.CODE_128, BarcodeFormat.QR_CODE])
     readerRef.current = new BrowserMultiFormatReader(hints)
 
     let pollId = null
@@ -127,19 +141,22 @@ export default function VinScanner({ onScanned, onClose }) {
       const track = stream.getVideoTracks()[0]
       const settings = track?.getSettings?.()
       if (settings?.width) setStreamRes(`${settings.width}×${settings.height}`)
+      let tick = 0
       pollId = setInterval(() => {
         if (modeRef.current !== 'scan') return
-        const canvas = cropElementToCanvas(barcodeGuideRef.current, 2)
+        // Even ticks: the wide guide-box crop (best for 1D barcodes). Odd
+        // ticks: the full frame, since a square QR code doesn't fit in that
+        // short strip.
+        const canvas = (tick++ % 2 === 0)
+          ? cropElementToCanvas(barcodeGuideRef.current, 2)
+          : fullFrameToCanvas(1280)
         if (!canvas) return
         const raw = decodeCanvas(canvas)
-        if (raw) {
-          const cleaned = raw.replace(/[^A-HJ-NPR-Z0-9]/gi, '').toUpperCase()
-          const match   = cleaned.match(VIN_RE)
-          if (match) {
-            if (navigator.vibrate) navigator.vibrate(100)
-            cleanup()
-            onScanned(match[0])
-          }
+        const vin = raw && extractVin(raw)
+        if (vin) {
+          if (navigator.vibrate) navigator.vibrate(100)
+          cleanup()
+          onScanned(vin)
         }
       }, 300)
     }).catch(err => {
@@ -268,6 +285,17 @@ export default function VinScanner({ onScanned, onClose }) {
     }
   }
 
+  function fullFrameToCanvas(maxW) {
+    const video = videoRef.current
+    if (!video || !video.videoWidth) return null
+    const scale  = Math.min(1, maxW / video.videoWidth)
+    const canvas = document.createElement('canvas')
+    canvas.width  = Math.round(video.videoWidth  * scale)
+    canvas.height = Math.round(video.videoHeight * scale)
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height)
+    return canvas
+  }
+
   // Maps an on-screen guide box back to the underlying video frame's pixel
   // coordinates (accounting for the object-fit: cover crop) and draws just
   // that region, upscaled, onto a fresh canvas. Real test photos showed this
@@ -321,15 +349,12 @@ export default function VinScanner({ onScanned, onClose }) {
       for (const k of CURVATURE_LEVELS) {
         const candidate = dewarpHorizontal(base, k)
         const raw = decodeCanvas(candidate)
-        if (raw) {
-          const cleaned = raw.replace(/[^A-HJ-NPR-Z0-9]/gi, '').toUpperCase()
-          const match   = cleaned.match(VIN_RE)
-          if (match) {
-            if (navigator.vibrate) navigator.vibrate(100)
-            cleanup()
-            onScanned(match[0])
-            return
-          }
+        const vin = raw && extractVin(raw)
+        if (vin) {
+          if (navigator.vibrate) navigator.vibrate(100)
+          cleanup()
+          onScanned(vin)
+          return
         }
         // Yield a tick between variants so the "trying…" state can actually paint.
         await new Promise(r => setTimeout(r, 0))
@@ -533,7 +558,7 @@ export default function VinScanner({ onScanned, onClose }) {
             color: '#fff', fontFamily: 'var(--font-display)',
             fontSize: 18, fontWeight: 700, letterSpacing: 1,
           }}>
-            {mode === 'scan'       && 'SCAN VIN BARCODE'}
+            {mode === 'scan'       && 'SCAN VIN BARCODE / QR'}
             {mode === 'capture'    && 'CAPTURE VIN TEXT'}
             {mode === 'processing' && 'READING TEXT…'}
             {mode === 'review'     && 'CONFIRM VIN'}
@@ -655,7 +680,7 @@ export default function VinScanner({ onScanned, onClose }) {
               <p style={{ color: '#e05252', fontSize: 13, lineHeight: 1.6, marginBottom: 8 }}>⚠ {stillErr}</p>
             )}
             <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, lineHeight: 1.6 }}>
-              Fill the box with the barcode on the driver-side door jamb
+              Fill the box with the barcode on the driver-side door jamb — or hold a QR code in view
             </p>
             <button onClick={captureStillAndDecode} disabled={stillBusy} style={{
               marginTop: 8, color: stillBusy ? 'rgba(244,160,36,0.5)' : '#f4a024', fontSize: 13, background: 'none',
