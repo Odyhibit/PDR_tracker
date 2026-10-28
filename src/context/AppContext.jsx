@@ -106,7 +106,10 @@ export function AppProvider({ children }) {
     const { error } = await supabase.auth.signUp({
       email: email.trim().toLowerCase(),
       password,
-      options: { data: { first_name: firstName } }
+      options: {
+        data: { first_name: firstName },
+        emailRedirectTo: `${window.location.origin}${window.location.pathname}`,
+      }
     })
     if (error) throw error
   }, [])

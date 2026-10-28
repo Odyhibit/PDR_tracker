@@ -38,7 +38,7 @@ export default function AuthPage() {
         await signIn(email, password)
       } else if (mode === 'signup') {
         await signUp(email, password, firstName.trim())
-        setMessage('Account created! Check your email to confirm, then log in.')
+        setMessage('Account created! You can log in now.')
         setMode('login')
         setFirstName('')
       } else if (mode === 'forgot') {
